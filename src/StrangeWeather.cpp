@@ -163,6 +163,7 @@ struct StrangeWeather : Module {
         CHAOS_A_PARAM,
         CHAOS_B_PARAM,
         CHAOS_C_PARAM,
+        TRAIL_PARAM,
         NUM_PARAMS
     };
     
@@ -209,18 +210,19 @@ struct StrangeWeather : Module {
     // Display state
     int displayMode = 4; // 0=A, 1=B, 2=C, 3=Combined, 4=All
     bool display3D = false; // Toggle between 2D and 3D view
+    int displayStyle = 0; // 0=Trace, 1=Lissajous (tiny dots), 2=Scope
 
     // Trail history for display (ring buffer)
-    static const int TRAIL_LENGTH = 256;
-    float trailX[3][TRAIL_LENGTH] = {};
-    float trailY[3][TRAIL_LENGTH] = {};
-    float trailZ[3][TRAIL_LENGTH] = {};
+    static const int MAX_TRAIL_LENGTH = 2048;
+    float trailX[3][MAX_TRAIL_LENGTH] = {};
+    float trailY[3][MAX_TRAIL_LENGTH] = {};
+    float trailZ[3][MAX_TRAIL_LENGTH] = {};
     int trailIndex = 0;
 
     // Combined trail
-    float combTrailX[TRAIL_LENGTH] = {};
-    float combTrailY[TRAIL_LENGTH] = {};
-    float combTrailZ[TRAIL_LENGTH] = {};
+    float combTrailX[MAX_TRAIL_LENGTH] = {};
+    float combTrailY[MAX_TRAIL_LENGTH] = {};
+    float combTrailZ[MAX_TRAIL_LENGTH] = {};
 
     // Sample counter for trail updates
     int trailCounter = 0;
@@ -253,6 +255,9 @@ struct StrangeWeather : Module {
         configParam(CHAOS_B_PARAM, 0.f, 1.f, 0.5f, "Chaos B", "%", 0.f, 100.f);
         configParam(CHAOS_C_PARAM, 0.f, 1.f, 0.5f, "Chaos C", "%", 0.f, 100.f);
 
+        // Trail length knob (64-2048)
+        configParam(TRAIL_PARAM, 0.f, 1.f, 0.5f, "Trail Length", "", 0.f, 1.f);
+
         // Output labels
         configOutput(A_X_OUTPUT, "Bank A X");
         configOutput(A_Y_OUTPUT, "Bank A Y");
@@ -275,7 +280,18 @@ struct StrangeWeather : Module {
     void cycleDisplay() {
         displayMode = (displayMode + 1) % 5;
     }
-    
+
+    void cycleDisplayStyle() {
+        displayStyle = (displayStyle + 1) % 3;
+    }
+
+    // Get current trail length from param (64 to 2048)
+    int getTrailLength() {
+        float knob = params[TRAIL_PARAM].getValue();
+        // Exponential scaling: 64 at 0, 2048 at 1
+        return (int)(64.f * std::pow(32.f, knob));
+    }
+
     // Helper to calculate rate from range and knob
     float calculateRate(int range, float knob) {
         float minHz, maxHz;
@@ -386,7 +402,7 @@ struct StrangeWeather : Module {
         trailCounter++;
         if (trailCounter >= (int)(args.sampleRate / 60.f)) { // ~60 fps
             trailCounter = 0;
-            trailIndex = (trailIndex + 1) % TRAIL_LENGTH;
+            trailIndex = (trailIndex + 1) % MAX_TRAIL_LENGTH;
 
             // Store smoothed normalized positions for display (-1 to 1 range)
             trailX[0][trailIndex] = smoothedX[0];
@@ -416,6 +432,7 @@ struct StrangeWeather : Module {
         json_t* rootJ = json_object();
         json_object_set_new(rootJ, "displayMode", json_integer(displayMode));
         json_object_set_new(rootJ, "display3D", json_boolean(display3D));
+        json_object_set_new(rootJ, "displayStyle", json_integer(displayStyle));
         return rootJ;
     }
 
@@ -427,6 +444,10 @@ struct StrangeWeather : Module {
         json_t* display3DJ = json_object_get(rootJ, "display3D");
         if (display3DJ) {
             display3D = json_boolean_value(display3DJ);
+        }
+        json_t* displayStyleJ = json_object_get(rootJ, "displayStyle");
+        if (displayStyleJ) {
+            displayStyle = json_integer_value(displayStyleJ);
         }
     }
 };
@@ -464,13 +485,23 @@ struct AttractorDisplay : Widget {
         nvgFillColor(args.vg, nvgRGB(0x11, 0x11, 0x11));
         nvgFill(args.vg);
 
+        // Clip drawing to display bounds
+        nvgSave(args.vg);
+        nvgScissor(args.vg, 0, 0, box.size.x, box.size.y);
+
         if (!module) {
             drawPreview(args);
+            nvgRestore(args.vg);
             return;
         }
 
         int mode = module->displayMode;
         bool is3D = module->display3D;
+
+        // Setup label style
+        nvgFontSize(args.vg, 8);
+        nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+        nvgFillColor(args.vg, nvgRGBA(0xff, 0xff, 0xff, 0x88));
 
         if (mode == 4) {
             // All four views
@@ -491,9 +522,21 @@ struct AttractorDisplay : Widget {
             nvgStrokeColor(args.vg, nvgRGBA(0x33, 0x33, 0x33, 0xff));
             nvgStrokeWidth(args.vg, 1.f);
             nvgStroke(args.vg);
+
+            // Quadrant labels (bottom-left of each quadrant)
+            nvgFillColor(args.vg, nvgRGBA(0xff, 0xff, 0xff, 0x88));
+            nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_BOTTOM);
+            nvgText(args.vg, 3, h - 3, "A", NULL);
+            nvgText(args.vg, w + 3, h - 3, "B", NULL);
+            nvgText(args.vg, 3, box.size.y - 3, "C", NULL);
+            nvgText(args.vg, w + 3, box.size.y - 3, "MIX", NULL);
         }
         else if (mode == 3) {
             drawCombined(args, 0, 0, box.size.x, box.size.y, nvgRGB(0xff, 0xff, 0xff), is3D);
+            // Label
+            nvgFillColor(args.vg, nvgRGBA(0xff, 0xff, 0xff, 0x88));
+            nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
+            nvgText(args.vg, box.size.x - 3, 3, "MIX", NULL);
         }
         else {
             NVGcolor colors[3] = {
@@ -501,17 +544,23 @@ struct AttractorDisplay : Widget {
                 nvgRGB(0xff, 0xaa, 0x00),
                 nvgRGB(0xaa, 0x00, 0xff)
             };
+            const char* labels[3] = {"A", "B", "C"};
             drawAttractor(args, mode, 0, 0, box.size.x, box.size.y, colors[mode], is3D);
+            // Label
+            nvgFillColor(args.vg, nvgRGBA(0xff, 0xff, 0xff, 0x88));
+            nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
+            nvgText(args.vg, box.size.x - 3, 3, labels[mode], NULL);
         }
 
         // Show 3D indicator
         if (is3D) {
-            nvgFontSize(args.vg, 8);
-            nvgFontFaceId(args.vg, APP->window->uiFont->handle);
             nvgFillColor(args.vg, nvgRGBA(0xff, 0xff, 0xff, 0x88));
             nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
             nvgText(args.vg, 3, 3, "3D", NULL);
         }
+
+        // Restore clipping
+        nvgRestore(args.vg);
     }
 
     void drawPreview(const DrawArgs& args) {
@@ -542,63 +591,76 @@ struct AttractorDisplay : Widget {
         float scale = std::min(w, h) / 2.f * 0.85f;
 
         int idx = module->trailIndex;
+        int style = module->displayStyle;
 
-        // Rotation angles for 3D mode (slower, more contemplative)
+        // Rotation angles for 3D mode
         float angleX = rotationTime * 0.2f;
         float angleY = rotationTime * 0.33f;
 
-        if (is3D) {
-            // 3D mode: glowing dots like Lissajous display
-            for (int i = 0; i < StrangeWeather::TRAIL_LENGTH; i++) {
-                int i0 = (idx - i + StrangeWeather::TRAIL_LENGTH) % StrangeWeather::TRAIL_LENGTH;
+        int trailLen = module->getTrailLength();
 
-                float sx, sy, depth;
-                project3D(module->trailX[bank][i0], module->trailY[bank][i0], module->trailZ[bank][i0],
-                         angleX, angleY, sx, sy, depth);
+        if (style == 2) {
+            // Scope mode: time-based waveforms (X, Y, Z stacked)
+            float rowH = h / 3.f;
+            float* data[3] = {module->trailX[bank], module->trailY[bank], module->trailZ[bank]};
 
-                float x = cx + sx * scale;
-                float y = cy + sy * scale;
+            for (int row = 0; row < 3; row++) {
+                float baseY = oy + rowH * row + rowH / 2.f;
+                float waveScale = rowH * 0.4f;
 
-                // Age-based fade (newer = brighter)
-                float age = (float)i / StrangeWeather::TRAIL_LENGTH;
-                float ageBright = 1.f - age * age;
+                nvgBeginPath(args.vg);
+                for (int i = 0; i < trailLen; i++) {
+                    int i0 = (idx - trailLen + 1 + i + StrangeWeather::MAX_TRAIL_LENGTH) % StrangeWeather::MAX_TRAIL_LENGTH;
+                    float xPos = ox + (float)i / trailLen * w;
+                    float yPos = baseY + data[row][i0] * waveScale;
+                    if (i == 0)
+                        nvgMoveTo(args.vg, xPos, yPos);
+                    else
+                        nvgLineTo(args.vg, xPos, yPos);
+                }
+                nvgStrokeColor(args.vg, nvgRGBAf(color.r, color.g, color.b, 0.8f));
+                nvgStrokeWidth(args.vg, 1.f);
+                nvgStroke(args.vg);
+            }
+        }
+        else if (style == 1 || is3D) {
+            // Lissajous mode (style 1) or 3D mode: tiny dots
+            for (int i = 0; i < trailLen; i++) {
+                int i0 = (idx - i + StrangeWeather::MAX_TRAIL_LENGTH) % StrangeWeather::MAX_TRAIL_LENGTH;
 
-                // Depth-based brightness and size (closer = brighter/larger)
-                float depthNorm = clamp((depth + 1.5f) / 3.f, 0.f, 1.f); // normalize depth to 0-1
-                float depthBright = 0.3f + 0.7f * (1.f - depthNorm);
-                float dotSize = 1.0f + 2.0f * (1.f - depthNorm);
-
-                float brightness = ageBright * depthBright;
-
-                // Draw glow (larger, dimmer circle behind)
-                if (brightness > 0.1f) {
-                    nvgBeginPath(args.vg);
-                    nvgCircle(args.vg, x, y, dotSize * 2.5f);
-                    nvgFillColor(args.vg, nvgRGBAf(color.r, color.g, color.b, brightness * 0.15f));
-                    nvgFill(args.vg);
+                float x, y;
+                if (is3D) {
+                    float sx, sy, depth;
+                    project3D(module->trailX[bank][i0], module->trailY[bank][i0], module->trailZ[bank][i0],
+                             angleX, angleY, sx, sy, depth);
+                    x = cx + sx * scale;
+                    y = cy + sy * scale;
+                } else {
+                    x = cx + module->trailX[bank][i0] * scale;
+                    y = cy + module->trailY[bank][i0] * scale;
                 }
 
-                // Draw main dot
+                // Age-based fade
+                float age = (float)i / trailLen;
+                float brightness = 1.f - age;
+                brightness = brightness * brightness;
+
+                // Tiny dots for Lissajous phosphor look
+                float dotSize = (style == 1) ? 0.8f : 1.5f;
+
                 nvgBeginPath(args.vg);
                 nvgCircle(args.vg, x, y, dotSize);
-                nvgFillColor(args.vg, nvgRGBAf(color.r, color.g, color.b, brightness * 0.8f));
+                nvgFillColor(args.vg, nvgRGBAf(color.r, color.g, color.b, brightness * 0.9f));
                 nvgFill(args.vg);
-
-                // Draw bright core for recent points
-                if (i < 20 && brightness > 0.5f) {
-                    nvgBeginPath(args.vg);
-                    nvgCircle(args.vg, x, y, dotSize * 0.5f);
-                    nvgFillColor(args.vg, nvgRGBAf(1.f, 1.f, 1.f, brightness * 0.5f));
-                    nvgFill(args.vg);
-                }
             }
-        } else {
-            // 2D mode: lines as before
-            for (int i = 0; i < StrangeWeather::TRAIL_LENGTH - 1; i++) {
-                int i0 = (idx - i + StrangeWeather::TRAIL_LENGTH) % StrangeWeather::TRAIL_LENGTH;
-                int i1 = (idx - i - 1 + StrangeWeather::TRAIL_LENGTH) % StrangeWeather::TRAIL_LENGTH;
+        }
+        else {
+            // Trace mode (style 0): lines
+            for (int i = 0; i < trailLen - 1; i++) {
+                int i0 = (idx - i + StrangeWeather::MAX_TRAIL_LENGTH) % StrangeWeather::MAX_TRAIL_LENGTH;
+                int i1 = (idx - i - 1 + StrangeWeather::MAX_TRAIL_LENGTH) % StrangeWeather::MAX_TRAIL_LENGTH;
 
-                float alpha = 1.f - (float)i / StrangeWeather::TRAIL_LENGTH;
+                float alpha = 1.f - (float)i / trailLen;
                 alpha = alpha * alpha * 0.8f;
 
                 float x0 = cx + module->trailX[bank][i0] * scale;
@@ -632,63 +694,76 @@ struct AttractorDisplay : Widget {
         float scale = std::min(w, h) / 2.f * 0.85f;
 
         int idx = module->trailIndex;
+        int style = module->displayStyle;
 
         // Rotation angles for 3D mode (slower, more contemplative)
         float angleX = rotationTime * 0.2f;
         float angleY = rotationTime * 0.33f;
 
-        if (is3D) {
-            // 3D mode: glowing dots
-            for (int i = 0; i < StrangeWeather::TRAIL_LENGTH; i++) {
-                int i0 = (idx - i + StrangeWeather::TRAIL_LENGTH) % StrangeWeather::TRAIL_LENGTH;
+        int trailLen = module->getTrailLength();
 
-                float sx, sy, depth;
-                project3D(module->combTrailX[i0], module->combTrailY[i0], module->combTrailZ[i0],
-                         angleX, angleY, sx, sy, depth);
+        if (style == 2) {
+            // Scope mode: time-based waveforms (X, Y, Z stacked)
+            float rowH = h / 3.f;
+            float* data[3] = {module->combTrailX, module->combTrailY, module->combTrailZ};
 
-                float x = cx + sx * scale;
-                float y = cy + sy * scale;
+            for (int row = 0; row < 3; row++) {
+                float baseY = oy + rowH * row + rowH / 2.f;
+                float waveScale = rowH * 0.4f;
+
+                nvgBeginPath(args.vg);
+                for (int i = 0; i < trailLen; i++) {
+                    int i0 = (idx - trailLen + 1 + i + StrangeWeather::MAX_TRAIL_LENGTH) % StrangeWeather::MAX_TRAIL_LENGTH;
+                    float xPos = ox + (float)i / trailLen * w;
+                    float yPos = baseY + data[row][i0] * waveScale;
+                    if (i == 0)
+                        nvgMoveTo(args.vg, xPos, yPos);
+                    else
+                        nvgLineTo(args.vg, xPos, yPos);
+                }
+                nvgStrokeColor(args.vg, nvgRGBAf(color.r, color.g, color.b, 0.8f));
+                nvgStrokeWidth(args.vg, 1.f);
+                nvgStroke(args.vg);
+            }
+        }
+        else if (style == 1 || is3D) {
+            // Lissajous mode (style 1) or 3D mode: tiny dots
+            for (int i = 0; i < trailLen; i++) {
+                int i0 = (idx - i + StrangeWeather::MAX_TRAIL_LENGTH) % StrangeWeather::MAX_TRAIL_LENGTH;
+
+                float x, y;
+                if (is3D) {
+                    float sx, sy, depth;
+                    project3D(module->combTrailX[i0], module->combTrailY[i0], module->combTrailZ[i0],
+                             angleX, angleY, sx, sy, depth);
+                    x = cx + sx * scale;
+                    y = cy + sy * scale;
+                } else {
+                    x = cx + module->combTrailX[i0] * scale;
+                    y = cy + module->combTrailY[i0] * scale;
+                }
 
                 // Age-based fade
-                float age = (float)i / StrangeWeather::TRAIL_LENGTH;
-                float ageBright = 1.f - age * age;
+                float age = (float)i / trailLen;
+                float brightness = 1.f - age;
+                brightness = brightness * brightness;
 
-                // Depth-based brightness and size
-                float depthNorm = clamp((depth + 1.5f) / 3.f, 0.f, 1.f);
-                float depthBright = 0.3f + 0.7f * (1.f - depthNorm);
-                float dotSize = 1.0f + 2.0f * (1.f - depthNorm);
+                // Tiny dots for Lissajous phosphor look
+                float dotSize = (style == 1) ? 0.8f : 1.5f;
 
-                float brightness = ageBright * depthBright;
-
-                // Draw glow
-                if (brightness > 0.1f) {
-                    nvgBeginPath(args.vg);
-                    nvgCircle(args.vg, x, y, dotSize * 2.5f);
-                    nvgFillColor(args.vg, nvgRGBAf(color.r, color.g, color.b, brightness * 0.15f));
-                    nvgFill(args.vg);
-                }
-
-                // Draw main dot
                 nvgBeginPath(args.vg);
                 nvgCircle(args.vg, x, y, dotSize);
-                nvgFillColor(args.vg, nvgRGBAf(color.r, color.g, color.b, brightness * 0.8f));
+                nvgFillColor(args.vg, nvgRGBAf(color.r, color.g, color.b, brightness * 0.9f));
                 nvgFill(args.vg);
-
-                // Draw bright core
-                if (i < 20 && brightness > 0.5f) {
-                    nvgBeginPath(args.vg);
-                    nvgCircle(args.vg, x, y, dotSize * 0.5f);
-                    nvgFillColor(args.vg, nvgRGBAf(1.f, 1.f, 1.f, brightness * 0.5f));
-                    nvgFill(args.vg);
-                }
             }
-        } else {
-            // 2D mode: lines
-            for (int i = 0; i < StrangeWeather::TRAIL_LENGTH - 1; i++) {
-                int i0 = (idx - i + StrangeWeather::TRAIL_LENGTH) % StrangeWeather::TRAIL_LENGTH;
-                int i1 = (idx - i - 1 + StrangeWeather::TRAIL_LENGTH) % StrangeWeather::TRAIL_LENGTH;
+        }
+        else {
+            // Trace mode (style 0): lines
+            for (int i = 0; i < trailLen - 1; i++) {
+                int i0 = (idx - i + StrangeWeather::MAX_TRAIL_LENGTH) % StrangeWeather::MAX_TRAIL_LENGTH;
+                int i1 = (idx - i - 1 + StrangeWeather::MAX_TRAIL_LENGTH) % StrangeWeather::MAX_TRAIL_LENGTH;
 
-                float alpha = 1.f - (float)i / StrangeWeather::TRAIL_LENGTH;
+                float alpha = 1.f - (float)i / trailLen;
                 alpha = alpha * alpha * 0.8f;
 
                 float x0 = cx + module->combTrailX[i0] * scale;
@@ -734,6 +809,24 @@ struct CycleButton : app::SvgSwitch {
     }
 };
 
+// Mode button - cycles through display styles (Trace/Lissajous/Scope)
+struct ModeButton : app::SvgSwitch {
+    StrangeWeather* swModule = nullptr;
+
+    ModeButton() {
+        momentary = true;
+        addFrame(Svg::load(asset::system("res/ComponentLibrary/TL1105_0.svg")));
+        addFrame(Svg::load(asset::system("res/ComponentLibrary/TL1105_1.svg")));
+    }
+
+    void onDragStart(const DragStartEvent& e) override {
+        SvgSwitch::onDragStart(e);
+        if (swModule) {
+            swModule->cycleDisplayStyle();
+        }
+    }
+};
+
 // 3D toggle button - toggles 3D display mode
 struct Toggle3DButton : app::SvgSwitch {
     StrangeWeather* swModule = nullptr;
@@ -755,6 +848,7 @@ struct Toggle3DButton : app::SvgSwitch {
 // 4-position vertical toggle switch
 struct CKSSFour : app::SvgSwitch {
     CKSSFour() {
+        shadow->opacity = 0.0;
         addFrame(Svg::load(asset::plugin(pluginInstance, "res/CKSSFour_0.svg")));
         addFrame(Svg::load(asset::plugin(pluginInstance, "res/CKSSFour_1.svg")));
         addFrame(Svg::load(asset::plugin(pluginInstance, "res/CKSSFour_2.svg")));
@@ -762,9 +856,17 @@ struct CKSSFour : app::SvgSwitch {
     }
 };
 
-// Small knob for chaos control
-struct SmallKnob : RoundSmallBlackKnob {
-    SmallKnob() {}
+// Davies-style knob for rate control (like Synthesis Technology)
+struct DaviesKnob : Davies1900hBlackKnob {
+    DaviesKnob() {}
+};
+
+// Small Davies knob for chaos
+struct SmallDaviesKnob : Davies1900hBlackKnob {
+    SmallDaviesKnob() {
+        // Scale down
+        box.size = mm2px(Vec(8.0, 8.0));
+    }
 };
 
 // Custom widget to draw panel labels using NanoVG
@@ -774,66 +876,66 @@ struct PanelLabels : Widget {
         nvgFontFaceId(args.vg, APP->window->uiFont->handle);
         nvgFillColor(args.vg, nvgRGB(0x22, 0x22, 0x22));
 
-        // Module title
+        // Module title (centered on 40HP panel = 101.6mm center)
         nvgFontSize(args.vg, 12);
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
-        nvgText(args.vg, mm2px(60.96), mm2px(2), "STRANGE WEATHER", NULL);
+        nvgText(args.vg, mm2px(101.6), mm2px(2), "STRANGE WEATHER", NULL);
 
         // Column headers
         nvgFontSize(args.vg, 8);
         nvgFillColor(args.vg, nvgRGB(0x44, 0x44, 0x44));
-        float headerY = mm2px(14);
-        nvgText(args.vg, mm2px(38), headerY, "RATE", NULL);
-        nvgText(args.vg, mm2px(48), headerY, "RNG", NULL);
-        nvgText(args.vg, mm2px(58), headerY, "SHAPE", NULL);
-        nvgText(args.vg, mm2px(68), headerY, "VOLT", NULL);
-        nvgText(args.vg, mm2px(78), headerY, "CHAOS", NULL);
-        nvgText(args.vg, mm2px(90), headerY, "x", NULL);
-        nvgText(args.vg, mm2px(98), headerY, "y", NULL);
-        nvgText(args.vg, mm2px(106), headerY, "z", NULL);
-        nvgText(args.vg, mm2px(114), headerY, "SUM", NULL);
+        float headerY = mm2px(10);
+        nvgText(args.vg, mm2px(85), headerY, "RATE", NULL);
+        nvgText(args.vg, mm2px(100), headerY, "RNG", NULL);
+        nvgText(args.vg, mm2px(112), headerY, "SHAPE", NULL);
+        nvgText(args.vg, mm2px(124), headerY, "VOLT", NULL);
+        nvgText(args.vg, mm2px(139), headerY, "CHAOS", NULL);
+        nvgText(args.vg, mm2px(158), headerY, "x", NULL);
+        nvgText(args.vg, mm2px(170), headerY, "y", NULL);
+        nvgText(args.vg, mm2px(182), headerY, "z", NULL);
+        nvgText(args.vg, mm2px(194), headerY, "SUM", NULL);
 
-        // Bank labels - single letters, right-aligned to left of controls
+        // Bank labels - single letters, to left of controls (more room now)
         nvgFontSize(args.vg, 10);
         nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
         nvgFillColor(args.vg, nvgRGB(0x00, 0x99, 0x66));
-        nvgText(args.vg, mm2px(33), mm2px(24), "A", NULL);
+        nvgText(args.vg, mm2px(77), mm2px(24), "A", NULL);
         nvgFillColor(args.vg, nvgRGB(0xcc, 0x88, 0x00));
-        nvgText(args.vg, mm2px(33), mm2px(48), "B", NULL);
+        nvgText(args.vg, mm2px(77), mm2px(48), "B", NULL);
         nvgFillColor(args.vg, nvgRGB(0x88, 0x00, 0xcc));
-        nvgText(args.vg, mm2px(33), mm2px(72), "C", NULL);
+        nvgText(args.vg, mm2px(77), mm2px(72), "C", NULL);
 
-        // CYCLE and 3D labels
+        // CYCLE, MODE, 3D, and TRAIL labels (below display)
         nvgFontSize(args.vg, 8);
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
         nvgFillColor(args.vg, nvgRGB(0x44, 0x44, 0x44));
-        nvgText(args.vg, mm2px(10), mm2px(57), "CYCLE", NULL);
-        nvgText(args.vg, mm2px(24), mm2px(57), "3D", NULL);
+        nvgText(args.vg, mm2px(10), mm2px(82), "CYCLE", NULL);
+        nvgText(args.vg, mm2px(25), mm2px(82), "MODE", NULL);
+        nvgText(args.vg, mm2px(40), mm2px(82), "3D", NULL);
+        nvgText(args.vg, mm2px(55), mm2px(82), "TRAIL", NULL);
 
-        // Combined section
+        // Combined section - label under RATE column, inline with jacks
         nvgFontSize(args.vg, 10);
+        nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
         nvgFillColor(args.vg, nvgRGB(0x99, 0x66, 0x00));
-        nvgText(args.vg, mm2px(20), mm2px(90), "COMBINED", NULL);
+        nvgText(args.vg, mm2px(85), mm2px(100), "COMBINED", NULL);
 
         // Combined output labels
         nvgFontSize(args.vg, 8);
+        nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
         nvgFillColor(args.vg, nvgRGB(0x44, 0x44, 0x44));
         float combY = mm2px(93);
-        nvgText(args.vg, mm2px(42), combY, "SUM", NULL);
-        nvgText(args.vg, mm2px(56), combY, "RECT", NULL);
-        nvgText(args.vg, mm2px(70), combY, "INV", NULL);
-        nvgText(args.vg, mm2px(84), combY, "DIST", NULL);
+        nvgText(args.vg, mm2px(115), combY, "SUM", NULL);
+        nvgText(args.vg, mm2px(135), combY, "RECT", NULL);
+        nvgText(args.vg, mm2px(155), combY, "INV", NULL);
+        nvgText(args.vg, mm2px(175), combY, "DIST", NULL);
 
-        // Legend at bottom
-        nvgFontSize(args.vg, 6);
-        nvgFillColor(args.vg, nvgRGB(0x88, 0x88, 0x88));
-        nvgText(args.vg, mm2px(60.96), mm2px(110), "SHAPE: Lorenz / Rossler / Thomas / Halvorsen", NULL);
-        nvgText(args.vg, mm2px(60.96), mm2px(114), "RANGE: Low(5-20m) / Med(1s-2m) / High(0.1-10s)", NULL);
-        nvgText(args.vg, mm2px(60.96), mm2px(118), "VOLT: +/-5V / +/-10V / 0-5V / 0-10V", NULL);
-
-        // Tagline
-        nvgFillColor(args.vg, nvgRGB(0xaa, 0xaa, 0xaa));
-        nvgText(args.vg, mm2px(60.96), mm2px(122), "chaos cv", NULL);
+        // Legend at bottom (centered, larger text)
+        nvgFontSize(args.vg, 8);
+        nvgFillColor(args.vg, nvgRGB(0x55, 0x55, 0x55));
+        nvgText(args.vg, mm2px(101.6), mm2px(109), "SHAPE: Lorenz / Rossler / Thomas / Halvorsen", NULL);
+        nvgText(args.vg, mm2px(101.6), mm2px(115), "RANGE: Low (5-20m) / Med (1s-2m) / High (0.1-10s)", NULL);
+        nvgText(args.vg, mm2px(101.6), mm2px(121), "VOLT: +/-5V / +/-10V / 0-5V / 0-10V", NULL);
     }
 };
 
@@ -857,69 +959,80 @@ struct StrangeWeatherWidget : ModuleWidget {
         labels->box.size = box.size;
         addChild(labels);
 
-        // Display (top left) - larger size for better visualization
+        // Display (large 60x60mm square)
         display = new AttractorDisplay();
-        display->box.pos = mm2px(Vec(2.0, 10.0));
-        display->box.size = mm2px(Vec(33.0, 36.0));
+        display->box.pos = mm2px(Vec(5.0, 12.0));
+        display->box.size = mm2px(Vec(60.0, 60.0));
         display->module = module;
         addChild(display);
-        
-        // Cycle button (below display) - not a param, just a widget
+
+        // Cycle button (below display)
         CycleButton* cycleBtn = new CycleButton();
-        cycleBtn->box.pos = mm2px(Vec(10.0, 52.0)).minus(cycleBtn->box.size.div(2));
+        cycleBtn->box.pos = mm2px(Vec(10.0, 77.0)).minus(cycleBtn->box.size.div(2));
         cycleBtn->swModule = module;
         addChild(cycleBtn);
 
-        // 3D toggle button (next to cycle button)
+        // Mode button (cycles display style)
+        ModeButton* modeBtn = new ModeButton();
+        modeBtn->box.pos = mm2px(Vec(25.0, 77.0)).minus(modeBtn->box.size.div(2));
+        modeBtn->swModule = module;
+        addChild(modeBtn);
+
+        // 3D toggle button
         Toggle3DButton* toggle3DBtn = new Toggle3DButton();
-        toggle3DBtn->box.pos = mm2px(Vec(24.0, 52.0)).minus(toggle3DBtn->box.size.div(2));
+        toggle3DBtn->box.pos = mm2px(Vec(40.0, 77.0)).minus(toggle3DBtn->box.size.div(2));
         toggle3DBtn->swModule = module;
         addChild(toggle3DBtn);
 
+        // Trail length knob
+        addParam(createParamCentered<Trimpot>(mm2px(Vec(55.0, 77.0)), module, StrangeWeather::TRAIL_PARAM));
+
         // Layout: Each bank has Rate knob, Range toggle (3-pos), Shape toggle (4-pos),
         //         Voltage toggle (4-pos), Chaos knob, then 4 outputs
+        // All x positions shifted +30mm for 36HP panel
 
         // Bank A controls and outputs (y = 24mm center)
+        // 40HP panel = 203.2mm wide. Controls start at 85mm to leave room for labels
         float yA = 24.0;
-        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.0, yA)), module, StrangeWeather::RATE_A_PARAM));
-        addParam(createParamCentered<CKSSThree>(mm2px(Vec(48.0, yA)), module, StrangeWeather::RANGE_A_PARAM));
-        addParam(createParamCentered<CKSSFour>(mm2px(Vec(58.0, yA)), module, StrangeWeather::SHAPE_A_PARAM));
-        addParam(createParamCentered<CKSSFour>(mm2px(Vec(68.0, yA)), module, StrangeWeather::VOLTAGE_A_PARAM));
-        addParam(createParamCentered<SmallKnob>(mm2px(Vec(78.0, yA)), module, StrangeWeather::CHAOS_A_PARAM));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(90.0, yA)), module, StrangeWeather::A_X_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(98.0, yA)), module, StrangeWeather::A_Y_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(106.0, yA)), module, StrangeWeather::A_Z_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(114.0, yA)), module, StrangeWeather::A_SUM_OUTPUT));
+        addParam(createParamCentered<DaviesKnob>(mm2px(Vec(85.0, yA)), module, StrangeWeather::RATE_A_PARAM));
+        addParam(createParamCentered<CKSSThree>(mm2px(Vec(100.0, yA)), module, StrangeWeather::RANGE_A_PARAM));
+        addParam(createParamCentered<CKSSFour>(mm2px(Vec(112.0, yA)), module, StrangeWeather::SHAPE_A_PARAM));
+        addParam(createParamCentered<CKSSFour>(mm2px(Vec(124.0, yA)), module, StrangeWeather::VOLTAGE_A_PARAM));
+        addParam(createParamCentered<DaviesKnob>(mm2px(Vec(139.0, yA)), module, StrangeWeather::CHAOS_A_PARAM));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(158.0, yA)), module, StrangeWeather::A_X_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(170.0, yA)), module, StrangeWeather::A_Y_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(182.0, yA)), module, StrangeWeather::A_Z_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(194.0, yA)), module, StrangeWeather::A_SUM_OUTPUT));
 
         // Bank B controls and outputs (y = 48mm center)
         float yB = 48.0;
-        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.0, yB)), module, StrangeWeather::RATE_B_PARAM));
-        addParam(createParamCentered<CKSSThree>(mm2px(Vec(48.0, yB)), module, StrangeWeather::RANGE_B_PARAM));
-        addParam(createParamCentered<CKSSFour>(mm2px(Vec(58.0, yB)), module, StrangeWeather::SHAPE_B_PARAM));
-        addParam(createParamCentered<CKSSFour>(mm2px(Vec(68.0, yB)), module, StrangeWeather::VOLTAGE_B_PARAM));
-        addParam(createParamCentered<SmallKnob>(mm2px(Vec(78.0, yB)), module, StrangeWeather::CHAOS_B_PARAM));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(90.0, yB)), module, StrangeWeather::B_X_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(98.0, yB)), module, StrangeWeather::B_Y_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(106.0, yB)), module, StrangeWeather::B_Z_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(114.0, yB)), module, StrangeWeather::B_SUM_OUTPUT));
+        addParam(createParamCentered<DaviesKnob>(mm2px(Vec(85.0, yB)), module, StrangeWeather::RATE_B_PARAM));
+        addParam(createParamCentered<CKSSThree>(mm2px(Vec(100.0, yB)), module, StrangeWeather::RANGE_B_PARAM));
+        addParam(createParamCentered<CKSSFour>(mm2px(Vec(112.0, yB)), module, StrangeWeather::SHAPE_B_PARAM));
+        addParam(createParamCentered<CKSSFour>(mm2px(Vec(124.0, yB)), module, StrangeWeather::VOLTAGE_B_PARAM));
+        addParam(createParamCentered<DaviesKnob>(mm2px(Vec(139.0, yB)), module, StrangeWeather::CHAOS_B_PARAM));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(158.0, yB)), module, StrangeWeather::B_X_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(170.0, yB)), module, StrangeWeather::B_Y_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(182.0, yB)), module, StrangeWeather::B_Z_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(194.0, yB)), module, StrangeWeather::B_SUM_OUTPUT));
 
         // Bank C controls and outputs (y = 72mm center)
         float yC = 72.0;
-        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.0, yC)), module, StrangeWeather::RATE_C_PARAM));
-        addParam(createParamCentered<CKSSThree>(mm2px(Vec(48.0, yC)), module, StrangeWeather::RANGE_C_PARAM));
-        addParam(createParamCentered<CKSSFour>(mm2px(Vec(58.0, yC)), module, StrangeWeather::SHAPE_C_PARAM));
-        addParam(createParamCentered<CKSSFour>(mm2px(Vec(68.0, yC)), module, StrangeWeather::VOLTAGE_C_PARAM));
-        addParam(createParamCentered<SmallKnob>(mm2px(Vec(78.0, yC)), module, StrangeWeather::CHAOS_C_PARAM));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(90.0, yC)), module, StrangeWeather::C_X_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(98.0, yC)), module, StrangeWeather::C_Y_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(106.0, yC)), module, StrangeWeather::C_Z_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(114.0, yC)), module, StrangeWeather::C_SUM_OUTPUT));
+        addParam(createParamCentered<DaviesKnob>(mm2px(Vec(85.0, yC)), module, StrangeWeather::RATE_C_PARAM));
+        addParam(createParamCentered<CKSSThree>(mm2px(Vec(100.0, yC)), module, StrangeWeather::RANGE_C_PARAM));
+        addParam(createParamCentered<CKSSFour>(mm2px(Vec(112.0, yC)), module, StrangeWeather::SHAPE_C_PARAM));
+        addParam(createParamCentered<CKSSFour>(mm2px(Vec(124.0, yC)), module, StrangeWeather::VOLTAGE_C_PARAM));
+        addParam(createParamCentered<DaviesKnob>(mm2px(Vec(139.0, yC)), module, StrangeWeather::CHAOS_C_PARAM));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(158.0, yC)), module, StrangeWeather::C_X_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(170.0, yC)), module, StrangeWeather::C_Y_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(182.0, yC)), module, StrangeWeather::C_Z_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(194.0, yC)), module, StrangeWeather::C_SUM_OUTPUT));
 
-        // Combined outputs (y = 100mm center)
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(42.0, 100.0)), module, StrangeWeather::COMB_SUM_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(56.0, 100.0)), module, StrangeWeather::COMB_RECT_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(70.0, 100.0)), module, StrangeWeather::COMB_INV_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(84.0, 100.0)), module, StrangeWeather::COMB_DIST_OUTPUT));
+        // Combined outputs (y = 100mm center, shifted right)
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(115.0, 100.0)), module, StrangeWeather::COMB_SUM_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(135.0, 100.0)), module, StrangeWeather::COMB_RECT_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(155.0, 100.0)), module, StrangeWeather::COMB_INV_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(175.0, 100.0)), module, StrangeWeather::COMB_DIST_OUTPUT));
     }
     
     void step() override {

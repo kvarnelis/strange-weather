@@ -1,28 +1,22 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="8.4mm" height="22mm" viewBox="0 0 8.4 22">
-  <!-- Background slot -->
-  <rect x="2.7" y="1" width="3" height="20" rx="1.5" fill="#1a1a1a" stroke="#333" stroke-width="0.3"/>
-
-  <!-- Position markers -->
-  <rect x="1.5" y="2.5" width="1" height="0.5" fill="#555"/>
-  <rect x="1.5" y="7.5" width="1" height="0.5" fill="#555"/>
-  <rect x="1.5" y="12.5" width="1" height="0.5" fill="#555"/>
-  <rect x="1.5" y="17.5" width="1" height="0.5" fill="#555"/>
-
-  <rect x="5.9" y="2.5" width="1" height="0.5" fill="#555"/>
-  <rect x="5.9" y="7.5" width="1" height="0.5" fill="#555"/>
-  <rect x="5.9" y="12.5" width="1" height="0.5" fill="#555"/>
-  <rect x="5.9" y="17.5" width="1" height="0.5" fill="#555"/>
-
-  <!-- Toggle lever - Position 2 -->
-  <rect x="1.2" y="11.5" width="6" height="4" rx="0.8" fill="#ddd" stroke="#999" stroke-width="0.2"/>
-  <rect x="1.7" y="12" width="5" height="3" rx="0.5" fill="url(#lever)"/>
-
-  <defs>
-    <linearGradient id="lever" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" style="stop-color:#f5f5f5"/>
-      <stop offset="50%" style="stop-color:#ccc"/>
-      <stop offset="100%" style="stop-color:#999"/>
-    </linearGradient>
-  </defs>
+<?xml version="1.0" encoding="utf-8"?>
+<svg version="1.0" xmlns="http://www.w3.org/2000/svg" x="0px" y="0px" width="13.457px" height="28.34766px" viewBox="0 0 13.457 28.34766">
+<path d="M0,1.41795c0-0.78124,0.6406-1.41797,1.41793-1.41797h10.62499c0.77739,0,1.4141,0.63671,1.4141,1.41797v25.51173c0,0.77735-0.63669,1.41797-1.4141,1.41797H1.41793C0.6406,28.34765,0,27.70702,0,26.92968V1.41795z"/>
+<linearGradient id="grad1" gradientUnits="userSpaceOnUse" x1="6.73046" y1="1.26953" x2="6.73046" y2="27.07812">
+	<stop offset="0" style="stop-color:#3B3B3B"/>
+	<stop offset="1" style="stop-color:#242424"/>
+</linearGradient>
+<path opacity="0.54" fill="url(#grad1)" d="M11.3242,1.26953H2.13671c-0.48326,0-0.87501,0.39176-0.87501,0.87501v24.05857c0,0.48326,0.39176,0.87501,0.87501,0.87501h9.18749c0.48326,0,0.87501-0.39176,0.87501-0.87501V2.14454C12.19921,1.66128,11.80746,1.26953,11.3242,1.26953z"/>
+<rect x="0.73033" y="0.80507" opacity="0.3" width="12.00026" height="1.71664"/>
+<g>
+	<linearGradient id="grad2" gradientUnits="userSpaceOnUse" x1="6.7285" y1="7.3" x2="6.7285" y2="16.15">
+		<stop offset="0.00559" style="stop-color:#3D3B3B"/>
+		<stop offset="1" style="stop-color:#2D2C2C"/>
+	</linearGradient>
+	<path fill="url(#grad2)" d="M1.25778,7.3h10.94143v8.84652H1.25778V7.3z"/>
+	<path fill="#5E5E5E" d="M1.25778,10.85h10.94143v0.87738H1.25778V10.85z"/>
+	<path fill="#5E5E5E" d="M1.25778,14.4h10.94143v0.87738H1.25778V14.4z"/>
+	<path fill="#5E5E5E" d="M1.25778,12.62h10.94143v0.87738H1.25778V12.62z"/>
+	<path fill="#5E5E5E" d="M1.25778,9.07h10.94143v0.87738H1.25778V9.07z"/>
+	<path fill="#797979" d="M1.25778,7.3h10.94143v0.87738H1.25778V7.3z"/>
+</g>
 </svg>
