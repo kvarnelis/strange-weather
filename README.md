@@ -96,8 +96,4 @@ cp -r res ~/Library/Application\ Support/Rack2/plugins-mac-arm64/StrangeWeather/
 
 GPL-3.0-or-later
 
-## Acknowledgments
 
-- Edward Lorenz — for discovering deterministic chaos
-- Worng Electronics Vector Space — output transform inspiration
-- Synthesis Technology E352 — interface reference
