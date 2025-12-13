@@ -1,6 +1,6 @@
 # Strange Weather
 
-A chaotic CV generator for VCV Rack based on strange attractors.
+A chaotic CV generator for VCV Rack 2 based on strange attractors.
 
 ## Overview
 
@@ -9,53 +9,84 @@ Strange Weather generates continuously evolving control voltages using mathemati
 ## Features
 
 - **3 Independent Banks** — Each runs its own strange attractor
-- **4 Attractor Types** — Lorenz, Rössler, Thomas, Halvorsen
+- **4 Attractor Types** — Lorenz, Rossler, Thomas, Halvorsen
 - **16 CV Outputs** — 4 per bank + 4 combined
 - **Real-time Visualization** — Watch the attractors evolve
-- **Extreme Rate Range** — From 20-minute cycles to audio rate
+- **3D Display Mode** — See the full three-dimensional structure with rotation
+- **Extreme Rate Range** — From 20-minute cycles to sub-second modulation
+
+## Installation
+
+### From Release
+
+1. Download the latest release for your platform
+2. Extract the zip file
+3. Copy the `StrangeWeather` folder to your VCV Rack 2 plugins directory:
+
+| Platform | Plugins Directory |
+|----------|-------------------|
+| macOS (Apple Silicon) | `~/Library/Application Support/Rack2/plugins-mac-arm64/` |
+| macOS (Intel) | `~/Documents/Rack2/plugins/` |
+| Windows | `%USERPROFILE%\Documents\Rack2\plugins\` |
+| Linux | `~/.Rack2/plugins/` |
+
+4. Restart VCV Rack
+
+### Building from Source
+
+Requires [VCV Rack SDK](https://vcvrack.com/manual/Building#Building-Rack-plugins) v2.x.
+
+```bash
+git clone https://github.com/yourusername/strange-weather.git
+cd strange-weather
+make RACK_DIR=/path/to/Rack-SDK
+```
+
+To install after building:
+
+```bash
+# macOS (Apple Silicon)
+mkdir -p ~/Library/Application\ Support/Rack2/plugins-mac-arm64/StrangeWeather
+cp plugin.dylib plugin.json ~/Library/Application\ Support/Rack2/plugins-mac-arm64/StrangeWeather/
+cp -r res ~/Library/Application\ Support/Rack2/plugins-mac-arm64/StrangeWeather/
+
+# macOS (Intel) / Linux / Windows - adjust path accordingly
+```
 
 ## Controls
 
 ### Per Bank (A, B, C)
-- **RATE** — Attractor speed (audio rate ↔ ~20 minutes)
-- **SHAPE** — 4-position switch selecting attractor type
+
+| Control | Function |
+|---------|----------|
+| **RATE** | Attractor evolution speed within selected range |
+| **RNG** | Range selector: Low (5-20 min), Med (1s-2min), High (0.1-10s) |
+| **SHAPE** | Attractor type: Lorenz, Rossler, Thomas, Halvorsen |
+| **VOLT** | Output voltage: +/-5V, +/-10V, 0-5V, 0-10V |
+| **CHAOS** | Primary chaos parameter - affects attractor behavior |
 
 ### Outputs Per Bank
-- **x** — Attractor x coordinate (±5V)
-- **y** — Attractor y coordinate (±5V)
-- **z** — Attractor z coordinate (±5V)
-- **Σ** — Sum: x + y + z
+- **x, y, z** — Attractor coordinates (scaled per VOLT setting)
+- **SUM** — x + y + z
 
 ### Combined Outputs
-- **Σ** — Sum of all bank sums
-- **|Σ|** — Rectified sum (all absolute values)
-- **−Σ** — Inverted sum
-- **INV** — Inverse distance: 5V minus absolute values
+- **SUM** — Sum of all bank sums
+- **RECT** — Rectified (absolute values)
+- **INV** — Inverted sum
+- **DIST** — Inverse distance from center
 
-### Display
-- **CYCLE** — Button cycles through 5 views: A, B, C, Combined, All
+### Display Controls
+- **CYCLE** — Cycles through views: A, B, C, Combined, All
+- **3D** — Toggles 3D rotation view
 
 ## Attractor Types
 
-- **Lorenz** — The original (1963). Two-lobed butterfly. Good fold-over behavior.
-- **Rössler** — Asymmetric spiral with occasional large excursions. Gentler.
-- **Thomas** — Cyclically symmetric. Smooth, rolling motion.
-- **Halvorsen** — Sculptural, aggressive. Sharp transitions.
-
-## Building
-
-```bash
-export RACK_DIR=/path/to/Rack-SDK
-make
-make install
-```
-
-## Known Issues / TODO
-
-- CKSSFour (4-position switch) doesn't exist in standard VCV component library — needs custom widget or alternative
-- Cycle button needs proper param-less implementation
-- Output scaling may need tuning per attractor type
-- DC blocking filter not yet implemented
+| Type | Character |
+|------|-----------|
+| **Lorenz** | The classic butterfly. Smooth, two-lobed with fold-over behavior |
+| **Rossler** | Asymmetric spiral with occasional large excursions |
+| **Thomas** | Cyclically symmetric, smooth rolling motion |
+| **Halvorsen** | Sculptural and aggressive with sharp transitions |
 
 ## License
 

@@ -20,30 +20,31 @@ enum AttractorType {
 struct Attractor {
     double x, y, z;
     AttractorType type;
-    
+    float chaos = 0.5f; // 0-1, controls primary chaos parameter
+
     // Bounding box tracking for normalization
     double minX, maxX, minY, maxY, minZ, maxZ;
-    
+
     Attractor() {
         // Initialize with slightly random starting point
         x = 0.1 + (random::uniform() - 0.5) * 0.1;
         y = 0.0 + (random::uniform() - 0.5) * 0.1;
         z = 0.0 + (random::uniform() - 0.5) * 0.1;
         type = LORENZ;
-        
+
         // Initial bounds (will adapt)
         minX = -20.0; maxX = 20.0;
         minY = -30.0; maxY = 30.0;
         minZ = 0.0;   maxZ = 50.0;
     }
-    
-    // Compute derivatives for current state
+
+    // Compute derivatives for current state (chaos affects primary parameter)
     void derivatives(double& dx, double& dy, double& dz) {
         switch (type) {
             case LORENZ: {
-                // σ = 10, ρ = 28, β = 8/3
+                // σ = 10, β = 8/3, ρ varies with chaos: 20-30
                 const double sigma = 10.0;
-                const double rho = 28.0;
+                const double rho = 20.0 + chaos * 10.0;  // chaos: periodic → chaotic
                 const double beta = 8.0 / 3.0;
                 dx = sigma * (y - x);
                 dy = x * (rho - z) - y;
@@ -51,26 +52,26 @@ struct Attractor {
                 break;
             }
             case ROSSLER: {
-                // a = 0.2, b = 0.2, c = 5.7
+                // a = 0.2, b = 0.2, c varies with chaos: 4-7
                 const double a = 0.2;
                 const double b = 0.2;
-                const double c = 5.7;
+                const double c = 4.0 + chaos * 3.0;  // chaos: tight spiral → wild
                 dx = -y - z;
                 dy = x + a * y;
                 dz = b + z * (x - c);
                 break;
             }
             case THOMAS: {
-                // b = 0.208186
-                const double b = 0.208186;
+                // b varies with chaos: 0.3-0.15 (inverted - lower = more chaos)
+                const double b = 0.3 - chaos * 0.15;  // chaos: damped → sustained
                 dx = std::sin(y) - b * x;
                 dy = std::sin(z) - b * y;
                 dz = std::sin(x) - b * z;
                 break;
             }
             case HALVORSEN: {
-                // a = 1.89
-                const double a = 1.89;
+                // a varies with chaos: 1.4-2.0
+                const double a = 1.4 + chaos * 0.6;  // chaos: mild → aggressive
                 dx = -a * x - 4.0 * y - 4.0 * z - y * y;
                 dy = -a * y - 4.0 * z - 4.0 * x - z * z;
                 dz = -a * z - 4.0 * x - 4.0 * y - x * x;
@@ -153,6 +154,15 @@ struct StrangeWeather : Module {
         SHAPE_A_PARAM,
         SHAPE_B_PARAM,
         SHAPE_C_PARAM,
+        RANGE_A_PARAM,
+        RANGE_B_PARAM,
+        RANGE_C_PARAM,
+        VOLTAGE_A_PARAM,
+        VOLTAGE_B_PARAM,
+        VOLTAGE_C_PARAM,
+        CHAOS_A_PARAM,
+        CHAOS_B_PARAM,
+        CHAOS_C_PARAM,
         NUM_PARAMS
     };
     
@@ -190,36 +200,59 @@ struct StrangeWeather : Module {
     
     // Three attractor banks
     Attractor attractors[3];
-    
+
+    // Smoothed outputs (one-pole lowpass)
+    float smoothedX[3] = {0.f, 0.f, 0.f};
+    float smoothedY[3] = {0.f, 0.f, 0.f};
+    float smoothedZ[3] = {0.f, 0.f, 0.f};
+
     // Display state
     int displayMode = 4; // 0=A, 1=B, 2=C, 3=Combined, 4=All
-    
+    bool display3D = false; // Toggle between 2D and 3D view
+
     // Trail history for display (ring buffer)
     static const int TRAIL_LENGTH = 256;
     float trailX[3][TRAIL_LENGTH] = {};
     float trailY[3][TRAIL_LENGTH] = {};
+    float trailZ[3][TRAIL_LENGTH] = {};
     int trailIndex = 0;
-    
+
     // Combined trail
     float combTrailX[TRAIL_LENGTH] = {};
     float combTrailY[TRAIL_LENGTH] = {};
-    
+    float combTrailZ[TRAIL_LENGTH] = {};
+
     // Sample counter for trail updates
     int trailCounter = 0;
     
     StrangeWeather() {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
-        
-        // Rate knobs: exponential scaling from ~0.00001 Hz to ~1000 Hz
-        configParam(RATE_A_PARAM, 0.f, 1.f, 0.5f, "Rate A", " Hz", 10.f, 0.0001f);
-        configParam(RATE_B_PARAM, 0.f, 1.f, 0.5f, "Rate B", " Hz", 10.f, 0.0001f);
-        configParam(RATE_C_PARAM, 0.f, 1.f, 0.5f, "Rate C", " Hz", 10.f, 0.0001f);
-        
+
+        // Rate knobs (fine control within selected range)
+        configParam(RATE_A_PARAM, 0.f, 1.f, 0.5f, "Rate A");
+        configParam(RATE_B_PARAM, 0.f, 1.f, 0.5f, "Rate B");
+        configParam(RATE_C_PARAM, 0.f, 1.f, 0.5f, "Rate C");
+
+        // Range switches (0=Low, 1=Med, 2=High)
+        configSwitch(RANGE_A_PARAM, 0.f, 2.f, 1.f, "Range A", {"Low (5-20 min)", "Med (1s-2min)", "High (0.1-10s)"});
+        configSwitch(RANGE_B_PARAM, 0.f, 2.f, 1.f, "Range B", {"Low (5-20 min)", "Med (1s-2min)", "High (0.1-10s)"});
+        configSwitch(RANGE_C_PARAM, 0.f, 2.f, 1.f, "Range C", {"Low (5-20 min)", "Med (1s-2min)", "High (0.1-10s)"});
+
         // Shape switches (0-3)
         configSwitch(SHAPE_A_PARAM, 0.f, 3.f, 0.f, "Shape A", {"Lorenz", "Rössler", "Thomas", "Halvorsen"});
         configSwitch(SHAPE_B_PARAM, 0.f, 3.f, 1.f, "Shape B", {"Lorenz", "Rössler", "Thomas", "Halvorsen"});
         configSwitch(SHAPE_C_PARAM, 0.f, 3.f, 2.f, "Shape C", {"Lorenz", "Rössler", "Thomas", "Halvorsen"});
-        
+
+        // Voltage switches (0=±5V, 1=±10V, 2=0-5V, 3=0-10V)
+        configSwitch(VOLTAGE_A_PARAM, 0.f, 3.f, 0.f, "Voltage A", {"±5V", "±10V", "0-5V", "0-10V"});
+        configSwitch(VOLTAGE_B_PARAM, 0.f, 3.f, 0.f, "Voltage B", {"±5V", "±10V", "0-5V", "0-10V"});
+        configSwitch(VOLTAGE_C_PARAM, 0.f, 3.f, 0.f, "Voltage C", {"±5V", "±10V", "0-5V", "0-10V"});
+
+        // Chaos knobs (0-1)
+        configParam(CHAOS_A_PARAM, 0.f, 1.f, 0.5f, "Chaos A", "%", 0.f, 100.f);
+        configParam(CHAOS_B_PARAM, 0.f, 1.f, 0.5f, "Chaos B", "%", 0.f, 100.f);
+        configParam(CHAOS_C_PARAM, 0.f, 1.f, 0.5f, "Chaos C", "%", 0.f, 100.f);
+
         // Output labels
         configOutput(A_X_OUTPUT, "Bank A X");
         configOutput(A_Y_OUTPUT, "Bank A Y");
@@ -243,111 +276,157 @@ struct StrangeWeather : Module {
         displayMode = (displayMode + 1) % 5;
     }
     
+    // Helper to calculate rate from range and knob
+    float calculateRate(int range, float knob) {
+        float minHz, maxHz;
+        switch (range) {
+            case 0: minHz = 0.0008f; maxHz = 0.003f; break;  // Low: 5-20 min
+            case 1: minHz = 0.008f;  maxHz = 1.0f;   break;  // Med: 1s-2min
+            default: minHz = 0.1f;   maxHz = 10.0f;  break;  // High: 0.1-10s
+        }
+        return minHz * std::pow(maxHz / minHz, knob);
+    }
+
+    // Helper to scale output based on voltage mode
+    float scaleVoltage(float normalized, int voltageMode) {
+        // normalized is -1 to +1
+        switch (voltageMode) {
+            case 0: return normalized * 5.0f;                    // ±5V
+            case 1: return normalized * 10.0f;                   // ±10V
+            case 2: return (normalized + 1.0f) * 2.5f;           // 0-5V
+            case 3: return (normalized + 1.0f) * 5.0f;           // 0-10V
+            default: return normalized * 5.0f;
+        }
+    }
+
     void process(const ProcessArgs& args) override {
-        // Get rate values (exponential scaling)
-        // Knob 0.0 -> 0.0001 Hz (~2.7 hours), 0.5 -> 1 Hz, 1.0 -> 1000 Hz
-        float rateA = std::pow(10.f, params[RATE_A_PARAM].getValue() * 4.f - 4.f);
-        float rateB = std::pow(10.f, params[RATE_B_PARAM].getValue() * 4.f - 4.f);
-        float rateC = std::pow(10.f, params[RATE_C_PARAM].getValue() * 4.f - 4.f);
-        
-        // Get attractor types
-        attractors[0].type = (AttractorType)(int)params[SHAPE_A_PARAM].getValue();
-        attractors[1].type = (AttractorType)(int)params[SHAPE_B_PARAM].getValue();
-        attractors[2].type = (AttractorType)(int)params[SHAPE_C_PARAM].getValue();
-        
-        // Integration time step scaled by rate
-        // Base dt chosen for stability at rate=1
-        float rates[3] = {rateA, rateB, rateC};
-        
+        // Smoothing coefficient (lower = smoother, ~0.001 at 48kHz gives nice smooth output)
+        float smoothCoeff = 6.0f / args.sampleRate;  // ~125ms time constant
+
+        // Process each bank
+        int rangeParams[3] = {RANGE_A_PARAM, RANGE_B_PARAM, RANGE_C_PARAM};
+        int rateParams[3] = {RATE_A_PARAM, RATE_B_PARAM, RATE_C_PARAM};
+        int shapeParams[3] = {SHAPE_A_PARAM, SHAPE_B_PARAM, SHAPE_C_PARAM};
+        int voltageParams[3] = {VOLTAGE_A_PARAM, VOLTAGE_B_PARAM, VOLTAGE_C_PARAM};
+        int chaosParams[3] = {CHAOS_A_PARAM, CHAOS_B_PARAM, CHAOS_C_PARAM};
+
+        float bankOutputs[3][4]; // [bank][x,y,z,sum]
+
         for (int i = 0; i < 3; i++) {
-            // Adaptive time step: smaller steps for higher rates
-            float dt = rates[i] / args.sampleRate;
-            
-            // For stability, limit maximum dt per sample
-            // and do multiple smaller steps if needed
+            // Get parameters
+            int range = (int)params[rangeParams[i]].getValue();
+            float rateKnob = params[rateParams[i]].getValue();
+            int voltageMode = (int)params[voltageParams[i]].getValue();
+
+            // Set attractor type and chaos
+            attractors[i].type = (AttractorType)(int)params[shapeParams[i]].getValue();
+            attractors[i].chaos = params[chaosParams[i]].getValue();
+
+            // Calculate rate
+            float rate = calculateRate(range, rateKnob);
+
+            // Adaptive time step
+            float dt = rate / args.sampleRate;
             const float maxDt = 0.01f;
             int steps = (int)std::ceil(dt / maxDt);
             steps = std::max(1, std::min(steps, 100));
             float subDt = dt / steps;
-            
+
             for (int s = 0; s < steps; s++) {
                 attractors[i].step(subDt);
             }
+
+            // Get raw normalized outputs (-1 to +1)
+            float rawX = attractors[i].getNormX() / 5.0f;  // getNormX returns ±5V, convert to ±1
+            float rawY = attractors[i].getNormY() / 5.0f;
+            float rawZ = attractors[i].getNormZ() / 5.0f;
+
+            // Apply smoothing
+            smoothedX[i] += smoothCoeff * (rawX - smoothedX[i]);
+            smoothedY[i] += smoothCoeff * (rawY - smoothedY[i]);
+            smoothedZ[i] += smoothCoeff * (rawZ - smoothedZ[i]);
+
+            // Scale to voltage
+            bankOutputs[i][0] = scaleVoltage(smoothedX[i], voltageMode);
+            bankOutputs[i][1] = scaleVoltage(smoothedY[i], voltageMode);
+            bankOutputs[i][2] = scaleVoltage(smoothedZ[i], voltageMode);
+            bankOutputs[i][3] = bankOutputs[i][0] + bankOutputs[i][1] + bankOutputs[i][2];
         }
-        
-        // Get normalized outputs
-        float ax = attractors[0].getNormX();
-        float ay = attractors[0].getNormY();
-        float az = attractors[0].getNormZ();
-        float aSum = ax + ay + az;
-        
-        float bx = attractors[1].getNormX();
-        float by = attractors[1].getNormY();
-        float bz = attractors[1].getNormZ();
-        float bSum = bx + by + bz;
-        
-        float cx = attractors[2].getNormX();
-        float cy = attractors[2].getNormY();
-        float cz = attractors[2].getNormZ();
-        float cSum = cx + cy + cz;
-        
-        // Bank outputs
-        outputs[A_X_OUTPUT].setVoltage(ax);
-        outputs[A_Y_OUTPUT].setVoltage(ay);
-        outputs[A_Z_OUTPUT].setVoltage(az);
-        outputs[A_SUM_OUTPUT].setVoltage(aSum);
-        
-        outputs[B_X_OUTPUT].setVoltage(bx);
-        outputs[B_Y_OUTPUT].setVoltage(by);
-        outputs[B_Z_OUTPUT].setVoltage(bz);
-        outputs[B_SUM_OUTPUT].setVoltage(bSum);
-        
-        outputs[C_X_OUTPUT].setVoltage(cx);
-        outputs[C_Y_OUTPUT].setVoltage(cy);
-        outputs[C_Z_OUTPUT].setVoltage(cz);
-        outputs[C_SUM_OUTPUT].setVoltage(cSum);
-        
-        // Combined outputs
-        float combSum = aSum + bSum + cSum;
-        float combRect = std::abs(aSum) + std::abs(bSum) + std::abs(cSum);
+
+        // Bank A outputs
+        outputs[A_X_OUTPUT].setVoltage(bankOutputs[0][0]);
+        outputs[A_Y_OUTPUT].setVoltage(bankOutputs[0][1]);
+        outputs[A_Z_OUTPUT].setVoltage(bankOutputs[0][2]);
+        outputs[A_SUM_OUTPUT].setVoltage(bankOutputs[0][3]);
+
+        // Bank B outputs
+        outputs[B_X_OUTPUT].setVoltage(bankOutputs[1][0]);
+        outputs[B_Y_OUTPUT].setVoltage(bankOutputs[1][1]);
+        outputs[B_Z_OUTPUT].setVoltage(bankOutputs[1][2]);
+        outputs[B_SUM_OUTPUT].setVoltage(bankOutputs[1][3]);
+
+        // Bank C outputs
+        outputs[C_X_OUTPUT].setVoltage(bankOutputs[2][0]);
+        outputs[C_Y_OUTPUT].setVoltage(bankOutputs[2][1]);
+        outputs[C_Z_OUTPUT].setVoltage(bankOutputs[2][2]);
+        outputs[C_SUM_OUTPUT].setVoltage(bankOutputs[2][3]);
+
+        // Combined outputs (using smoothed normalized values for consistency)
+        float combSum = bankOutputs[0][3] + bankOutputs[1][3] + bankOutputs[2][3];
+        float combRect = std::abs(bankOutputs[0][3]) + std::abs(bankOutputs[1][3]) + std::abs(bankOutputs[2][3]);
         float combInv = -combSum;
-        float combDist = 5.f - std::abs(aSum) - std::abs(bSum) - std::abs(cSum);
-        
+        float combDist = 5.f - std::abs(bankOutputs[0][3]) - std::abs(bankOutputs[1][3]) - std::abs(bankOutputs[2][3]);
+
         outputs[COMB_SUM_OUTPUT].setVoltage(combSum);
         outputs[COMB_RECT_OUTPUT].setVoltage(combRect);
         outputs[COMB_INV_OUTPUT].setVoltage(combInv);
         outputs[COMB_DIST_OUTPUT].setVoltage(combDist);
-        
+
         // Update trail history (downsample for display)
         trailCounter++;
         if (trailCounter >= (int)(args.sampleRate / 60.f)) { // ~60 fps
             trailCounter = 0;
             trailIndex = (trailIndex + 1) % TRAIL_LENGTH;
-            
-            // Store normalized positions for display (-1 to 1 range)
-            trailX[0][trailIndex] = ax / 5.f;
-            trailY[0][trailIndex] = ay / 5.f;
-            trailX[1][trailIndex] = bx / 5.f;
-            trailY[1][trailIndex] = by / 5.f;
-            trailX[2][trailIndex] = cx / 5.f;
-            trailY[2][trailIndex] = cy / 5.f;
-            
-            // Combined: use sum and rectified sum as x,y
-            combTrailX[trailIndex] = clamp(combSum / 15.f, -1.f, 1.f);
-            combTrailY[trailIndex] = clamp(combRect / 15.f - 1.f, -1.f, 1.f);
+
+            // Store smoothed normalized positions for display (-1 to 1 range)
+            trailX[0][trailIndex] = smoothedX[0];
+            trailY[0][trailIndex] = smoothedY[0];
+            trailZ[0][trailIndex] = smoothedZ[0];
+            trailX[1][trailIndex] = smoothedX[1];
+            trailY[1][trailIndex] = smoothedY[1];
+            trailZ[1][trailIndex] = smoothedZ[1];
+            trailX[2][trailIndex] = smoothedX[2];
+            trailY[2][trailIndex] = smoothedY[2];
+            trailZ[2][trailIndex] = smoothedZ[2];
+
+            // Combined: use sum and rectified sum as x,y,z
+            float normSum = (smoothedX[0] + smoothedY[0] + smoothedZ[0] +
+                            smoothedX[1] + smoothedY[1] + smoothedZ[1] +
+                            smoothedX[2] + smoothedY[2] + smoothedZ[2]) / 9.f;
+            float normRect = (std::abs(smoothedX[0]) + std::abs(smoothedY[0]) + std::abs(smoothedZ[0]) +
+                             std::abs(smoothedX[1]) + std::abs(smoothedY[1]) + std::abs(smoothedZ[1]) +
+                             std::abs(smoothedX[2]) + std::abs(smoothedY[2]) + std::abs(smoothedZ[2])) / 9.f;
+            combTrailX[trailIndex] = clamp(normSum, -1.f, 1.f);
+            combTrailY[trailIndex] = clamp(normRect * 2.f - 1.f, -1.f, 1.f);
+            combTrailZ[trailIndex] = clamp((smoothedZ[0] + smoothedZ[1] + smoothedZ[2]) / 3.f, -1.f, 1.f);
         }
     }
-    
+
     json_t* dataToJson() override {
         json_t* rootJ = json_object();
         json_object_set_new(rootJ, "displayMode", json_integer(displayMode));
+        json_object_set_new(rootJ, "display3D", json_boolean(display3D));
         return rootJ;
     }
-    
+
     void dataFromJson(json_t* rootJ) override {
         json_t* displayModeJ = json_object_get(rootJ, "displayMode");
         if (displayModeJ) {
             displayMode = json_integer_value(displayModeJ);
+        }
+        json_t* display3DJ = json_object_get(rootJ, "display3D");
+        if (display3DJ) {
+            display3D = json_boolean_value(display3DJ);
         }
     }
 };
@@ -356,32 +435,53 @@ struct StrangeWeather : Module {
 // Custom display widget for attractor visualization
 struct AttractorDisplay : Widget {
     StrangeWeather* module = nullptr;
-    
+    float rotationTime = 0.f;
+
+    // 3D projection: rotate point and return screen coordinates
+    void project3D(float x, float y, float z, float angleX, float angleY, float& screenX, float& screenY, float& depth) {
+        // Rotate around Y axis
+        float rx = x * std::cos(angleY) - z * std::sin(angleY);
+        float rz = x * std::sin(angleY) + z * std::cos(angleY);
+
+        // Rotate around X axis
+        float ry = y * std::cos(angleX) - rz * std::sin(angleX);
+        float finalZ = y * std::sin(angleX) + rz * std::cos(angleX);
+
+        // Simple perspective
+        float perspective = 1.0f / (1.0f + finalZ * 0.15f);
+        screenX = rx * perspective;
+        screenY = ry * perspective;
+        depth = finalZ;
+    }
+
     void draw(const DrawArgs& args) override {
+        // Update rotation time for 3D mode
+        rotationTime += 1.f / 60.f;  // Approximate 60fps
+
         // Background
         nvgBeginPath(args.vg);
         nvgRect(args.vg, 0, 0, box.size.x, box.size.y);
         nvgFillColor(args.vg, nvgRGB(0x11, 0x11, 0x11));
         nvgFill(args.vg);
-        
+
         if (!module) {
-            // Preview display when module not loaded
             drawPreview(args);
             return;
         }
-        
+
         int mode = module->displayMode;
-        
+        bool is3D = module->display3D;
+
         if (mode == 4) {
             // All four views
             float w = box.size.x / 2.f;
             float h = box.size.y / 2.f;
-            
-            drawAttractor(args, 0, 0, 0, w, h, nvgRGB(0x00, 0xff, 0xaa));
-            drawAttractor(args, 1, w, 0, w, h, nvgRGB(0xff, 0xaa, 0x00));
-            drawAttractor(args, 2, 0, h, w, h, nvgRGB(0xaa, 0x00, 0xff));
-            drawCombined(args, w, h, w, h, nvgRGB(0xff, 0xff, 0xff));
-            
+
+            drawAttractor(args, 0, 0, 0, w, h, nvgRGB(0x00, 0xff, 0xaa), is3D);
+            drawAttractor(args, 1, w, 0, w, h, nvgRGB(0xff, 0xaa, 0x00), is3D);
+            drawAttractor(args, 2, 0, h, w, h, nvgRGB(0xaa, 0x00, 0xff), is3D);
+            drawCombined(args, w, h, w, h, nvgRGB(0xff, 0xff, 0xff), is3D);
+
             // Grid lines
             nvgBeginPath(args.vg);
             nvgMoveTo(args.vg, w, 0);
@@ -393,27 +493,33 @@ struct AttractorDisplay : Widget {
             nvgStroke(args.vg);
         }
         else if (mode == 3) {
-            // Combined only
-            drawCombined(args, 0, 0, box.size.x, box.size.y, nvgRGB(0xff, 0xff, 0xff));
+            drawCombined(args, 0, 0, box.size.x, box.size.y, nvgRGB(0xff, 0xff, 0xff), is3D);
         }
         else {
-            // Single attractor (0, 1, or 2)
             NVGcolor colors[3] = {
                 nvgRGB(0x00, 0xff, 0xaa),
                 nvgRGB(0xff, 0xaa, 0x00),
                 nvgRGB(0xaa, 0x00, 0xff)
             };
-            drawAttractor(args, mode, 0, 0, box.size.x, box.size.y, colors[mode]);
+            drawAttractor(args, mode, 0, 0, box.size.x, box.size.y, colors[mode], is3D);
+        }
+
+        // Show 3D indicator
+        if (is3D) {
+            nvgFontSize(args.vg, 8);
+            nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+            nvgFillColor(args.vg, nvgRGBA(0xff, 0xff, 0xff, 0x88));
+            nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+            nvgText(args.vg, 3, 3, "3D", NULL);
         }
     }
-    
+
     void drawPreview(const DrawArgs& args) {
-        // Simple Lorenz-ish shape for preview
         nvgBeginPath(args.vg);
         float cx = box.size.x / 2.f;
         float cy = box.size.y / 2.f;
         float r = std::min(cx, cy) * 0.6f;
-        
+
         for (int i = 0; i < 100; i++) {
             float t = i / 100.f * 2.f * M_PI;
             float x = cx + r * std::sin(t) * std::cos(t * 0.5f);
@@ -427,91 +533,307 @@ struct AttractorDisplay : Widget {
         nvgStrokeWidth(args.vg, 1.f);
         nvgStroke(args.vg);
     }
-    
-    void drawAttractor(const DrawArgs& args, int bank, float ox, float oy, float w, float h, NVGcolor color) {
+
+    void drawAttractor(const DrawArgs& args, int bank, float ox, float oy, float w, float h, NVGcolor color, bool is3D) {
         if (!module) return;
-        
+
         float cx = ox + w / 2.f;
         float cy = oy + h / 2.f;
-        float scale = std::min(w, h) / 2.f * 0.9f;
-        
+        float scale = std::min(w, h) / 2.f * 0.85f;
+
         int idx = module->trailIndex;
-        
-        // Draw trail with fading
-        for (int i = 0; i < StrangeWeather::TRAIL_LENGTH - 1; i++) {
-            int i0 = (idx - i + StrangeWeather::TRAIL_LENGTH) % StrangeWeather::TRAIL_LENGTH;
-            int i1 = (idx - i - 1 + StrangeWeather::TRAIL_LENGTH) % StrangeWeather::TRAIL_LENGTH;
-            
-            float alpha = 1.f - (float)i / StrangeWeather::TRAIL_LENGTH;
-            alpha = alpha * alpha * 0.8f;
-            
-            float x0 = cx + module->trailX[bank][i0] * scale;
-            float y0 = cy + module->trailY[bank][i0] * scale;
-            float x1 = cx + module->trailX[bank][i1] * scale;
-            float y1 = cy + module->trailY[bank][i1] * scale;
-            
+
+        // Rotation angles for 3D mode (slower, more contemplative)
+        float angleX = rotationTime * 0.2f;
+        float angleY = rotationTime * 0.33f;
+
+        if (is3D) {
+            // 3D mode: glowing dots like Lissajous display
+            for (int i = 0; i < StrangeWeather::TRAIL_LENGTH; i++) {
+                int i0 = (idx - i + StrangeWeather::TRAIL_LENGTH) % StrangeWeather::TRAIL_LENGTH;
+
+                float sx, sy, depth;
+                project3D(module->trailX[bank][i0], module->trailY[bank][i0], module->trailZ[bank][i0],
+                         angleX, angleY, sx, sy, depth);
+
+                float x = cx + sx * scale;
+                float y = cy + sy * scale;
+
+                // Age-based fade (newer = brighter)
+                float age = (float)i / StrangeWeather::TRAIL_LENGTH;
+                float ageBright = 1.f - age * age;
+
+                // Depth-based brightness and size (closer = brighter/larger)
+                float depthNorm = clamp((depth + 1.5f) / 3.f, 0.f, 1.f); // normalize depth to 0-1
+                float depthBright = 0.3f + 0.7f * (1.f - depthNorm);
+                float dotSize = 1.0f + 2.0f * (1.f - depthNorm);
+
+                float brightness = ageBright * depthBright;
+
+                // Draw glow (larger, dimmer circle behind)
+                if (brightness > 0.1f) {
+                    nvgBeginPath(args.vg);
+                    nvgCircle(args.vg, x, y, dotSize * 2.5f);
+                    nvgFillColor(args.vg, nvgRGBAf(color.r, color.g, color.b, brightness * 0.15f));
+                    nvgFill(args.vg);
+                }
+
+                // Draw main dot
+                nvgBeginPath(args.vg);
+                nvgCircle(args.vg, x, y, dotSize);
+                nvgFillColor(args.vg, nvgRGBAf(color.r, color.g, color.b, brightness * 0.8f));
+                nvgFill(args.vg);
+
+                // Draw bright core for recent points
+                if (i < 20 && brightness > 0.5f) {
+                    nvgBeginPath(args.vg);
+                    nvgCircle(args.vg, x, y, dotSize * 0.5f);
+                    nvgFillColor(args.vg, nvgRGBAf(1.f, 1.f, 1.f, brightness * 0.5f));
+                    nvgFill(args.vg);
+                }
+            }
+        } else {
+            // 2D mode: lines as before
+            for (int i = 0; i < StrangeWeather::TRAIL_LENGTH - 1; i++) {
+                int i0 = (idx - i + StrangeWeather::TRAIL_LENGTH) % StrangeWeather::TRAIL_LENGTH;
+                int i1 = (idx - i - 1 + StrangeWeather::TRAIL_LENGTH) % StrangeWeather::TRAIL_LENGTH;
+
+                float alpha = 1.f - (float)i / StrangeWeather::TRAIL_LENGTH;
+                alpha = alpha * alpha * 0.8f;
+
+                float x0 = cx + module->trailX[bank][i0] * scale;
+                float y0 = cy + module->trailY[bank][i0] * scale;
+                float x1 = cx + module->trailX[bank][i1] * scale;
+                float y1 = cy + module->trailY[bank][i1] * scale;
+
+                nvgBeginPath(args.vg);
+                nvgMoveTo(args.vg, x0, y0);
+                nvgLineTo(args.vg, x1, y1);
+                nvgStrokeColor(args.vg, nvgRGBAf(color.r, color.g, color.b, alpha));
+                nvgStrokeWidth(args.vg, 1.f + alpha);
+                nvgStroke(args.vg);
+            }
+
+            // Current position dot
+            float x = cx + module->trailX[bank][idx] * scale;
+            float y = cy + module->trailY[bank][idx] * scale;
             nvgBeginPath(args.vg);
-            nvgMoveTo(args.vg, x0, y0);
-            nvgLineTo(args.vg, x1, y1);
-            nvgStrokeColor(args.vg, nvgRGBAf(color.r, color.g, color.b, alpha));
-            nvgStrokeWidth(args.vg, 1.f + alpha);
-            nvgStroke(args.vg);
+            nvgCircle(args.vg, x, y, 2.f);
+            nvgFillColor(args.vg, color);
+            nvgFill(args.vg);
         }
-        
-        // Current position dot
-        float x = cx + module->trailX[bank][idx] * scale;
-        float y = cy + module->trailY[bank][idx] * scale;
-        nvgBeginPath(args.vg);
-        nvgCircle(args.vg, x, y, 2.f);
-        nvgFillColor(args.vg, color);
-        nvgFill(args.vg);
     }
     
-    void drawCombined(const DrawArgs& args, float ox, float oy, float w, float h, NVGcolor color) {
+    void drawCombined(const DrawArgs& args, float ox, float oy, float w, float h, NVGcolor color, bool is3D) {
         if (!module) return;
-        
+
         float cx = ox + w / 2.f;
         float cy = oy + h / 2.f;
-        float scale = std::min(w, h) / 2.f * 0.9f;
-        
+        float scale = std::min(w, h) / 2.f * 0.85f;
+
         int idx = module->trailIndex;
-        
-        for (int i = 0; i < StrangeWeather::TRAIL_LENGTH - 1; i++) {
-            int i0 = (idx - i + StrangeWeather::TRAIL_LENGTH) % StrangeWeather::TRAIL_LENGTH;
-            int i1 = (idx - i - 1 + StrangeWeather::TRAIL_LENGTH) % StrangeWeather::TRAIL_LENGTH;
-            
-            float alpha = 1.f - (float)i / StrangeWeather::TRAIL_LENGTH;
-            alpha = alpha * alpha * 0.8f;
-            
-            float x0 = cx + module->combTrailX[i0] * scale;
-            float y0 = cy + module->combTrailY[i0] * scale;
-            float x1 = cx + module->combTrailX[i1] * scale;
-            float y1 = cy + module->combTrailY[i1] * scale;
-            
+
+        // Rotation angles for 3D mode (slower, more contemplative)
+        float angleX = rotationTime * 0.2f;
+        float angleY = rotationTime * 0.33f;
+
+        if (is3D) {
+            // 3D mode: glowing dots
+            for (int i = 0; i < StrangeWeather::TRAIL_LENGTH; i++) {
+                int i0 = (idx - i + StrangeWeather::TRAIL_LENGTH) % StrangeWeather::TRAIL_LENGTH;
+
+                float sx, sy, depth;
+                project3D(module->combTrailX[i0], module->combTrailY[i0], module->combTrailZ[i0],
+                         angleX, angleY, sx, sy, depth);
+
+                float x = cx + sx * scale;
+                float y = cy + sy * scale;
+
+                // Age-based fade
+                float age = (float)i / StrangeWeather::TRAIL_LENGTH;
+                float ageBright = 1.f - age * age;
+
+                // Depth-based brightness and size
+                float depthNorm = clamp((depth + 1.5f) / 3.f, 0.f, 1.f);
+                float depthBright = 0.3f + 0.7f * (1.f - depthNorm);
+                float dotSize = 1.0f + 2.0f * (1.f - depthNorm);
+
+                float brightness = ageBright * depthBright;
+
+                // Draw glow
+                if (brightness > 0.1f) {
+                    nvgBeginPath(args.vg);
+                    nvgCircle(args.vg, x, y, dotSize * 2.5f);
+                    nvgFillColor(args.vg, nvgRGBAf(color.r, color.g, color.b, brightness * 0.15f));
+                    nvgFill(args.vg);
+                }
+
+                // Draw main dot
+                nvgBeginPath(args.vg);
+                nvgCircle(args.vg, x, y, dotSize);
+                nvgFillColor(args.vg, nvgRGBAf(color.r, color.g, color.b, brightness * 0.8f));
+                nvgFill(args.vg);
+
+                // Draw bright core
+                if (i < 20 && brightness > 0.5f) {
+                    nvgBeginPath(args.vg);
+                    nvgCircle(args.vg, x, y, dotSize * 0.5f);
+                    nvgFillColor(args.vg, nvgRGBAf(1.f, 1.f, 1.f, brightness * 0.5f));
+                    nvgFill(args.vg);
+                }
+            }
+        } else {
+            // 2D mode: lines
+            for (int i = 0; i < StrangeWeather::TRAIL_LENGTH - 1; i++) {
+                int i0 = (idx - i + StrangeWeather::TRAIL_LENGTH) % StrangeWeather::TRAIL_LENGTH;
+                int i1 = (idx - i - 1 + StrangeWeather::TRAIL_LENGTH) % StrangeWeather::TRAIL_LENGTH;
+
+                float alpha = 1.f - (float)i / StrangeWeather::TRAIL_LENGTH;
+                alpha = alpha * alpha * 0.8f;
+
+                float x0 = cx + module->combTrailX[i0] * scale;
+                float y0 = cy + module->combTrailY[i0] * scale;
+                float x1 = cx + module->combTrailX[i1] * scale;
+                float y1 = cy + module->combTrailY[i1] * scale;
+
+                nvgBeginPath(args.vg);
+                nvgMoveTo(args.vg, x0, y0);
+                nvgLineTo(args.vg, x1, y1);
+                nvgStrokeColor(args.vg, nvgRGBAf(color.r, color.g, color.b, alpha));
+                nvgStrokeWidth(args.vg, 1.f + alpha);
+                nvgStroke(args.vg);
+            }
+
+            // Current position dot
+            float x = cx + module->combTrailX[idx] * scale;
+            float y = cy + module->combTrailY[idx] * scale;
             nvgBeginPath(args.vg);
-            nvgMoveTo(args.vg, x0, y0);
-            nvgLineTo(args.vg, x1, y1);
-            nvgStrokeColor(args.vg, nvgRGBAf(color.r, color.g, color.b, alpha));
-            nvgStrokeWidth(args.vg, 1.f + alpha);
-            nvgStroke(args.vg);
+            nvgCircle(args.vg, x, y, 2.f);
+            nvgFillColor(args.vg, color);
+            nvgFill(args.vg);
         }
-        
-        float x = cx + module->combTrailX[idx] * scale;
-        float y = cy + module->combTrailY[idx] * scale;
-        nvgBeginPath(args.vg);
-        nvgCircle(args.vg, x, y, 2.f);
-        nvgFillColor(args.vg, color);
-        nvgFill(args.vg);
     }
 };
 
 
-// Cycle button
-struct CycleButton : SvgSwitch {
+// Cycle button - triggers display mode change on click
+struct CycleButton : app::SvgSwitch {
+    StrangeWeather* swModule = nullptr;
+
     CycleButton() {
         momentary = true;
         addFrame(Svg::load(asset::system("res/ComponentLibrary/TL1105_0.svg")));
         addFrame(Svg::load(asset::system("res/ComponentLibrary/TL1105_1.svg")));
+    }
+
+    void onDragStart(const DragStartEvent& e) override {
+        SvgSwitch::onDragStart(e);
+        if (swModule) {
+            swModule->cycleDisplay();
+        }
+    }
+};
+
+// 3D toggle button - toggles 3D display mode
+struct Toggle3DButton : app::SvgSwitch {
+    StrangeWeather* swModule = nullptr;
+
+    Toggle3DButton() {
+        momentary = true;
+        addFrame(Svg::load(asset::system("res/ComponentLibrary/TL1105_0.svg")));
+        addFrame(Svg::load(asset::system("res/ComponentLibrary/TL1105_1.svg")));
+    }
+
+    void onDragStart(const DragStartEvent& e) override {
+        SvgSwitch::onDragStart(e);
+        if (swModule) {
+            swModule->display3D = !swModule->display3D;
+        }
+    }
+};
+
+// 4-position vertical toggle switch
+struct CKSSFour : app::SvgSwitch {
+    CKSSFour() {
+        addFrame(Svg::load(asset::plugin(pluginInstance, "res/CKSSFour_0.svg")));
+        addFrame(Svg::load(asset::plugin(pluginInstance, "res/CKSSFour_1.svg")));
+        addFrame(Svg::load(asset::plugin(pluginInstance, "res/CKSSFour_2.svg")));
+        addFrame(Svg::load(asset::plugin(pluginInstance, "res/CKSSFour_3.svg")));
+    }
+};
+
+// Small knob for chaos control
+struct SmallKnob : RoundSmallBlackKnob {
+    SmallKnob() {}
+};
+
+// Custom widget to draw panel labels using NanoVG
+struct PanelLabels : Widget {
+    void draw(const DrawArgs& args) override {
+        nvgFontSize(args.vg, 10);
+        nvgFontFaceId(args.vg, APP->window->uiFont->handle);
+        nvgFillColor(args.vg, nvgRGB(0x22, 0x22, 0x22));
+
+        // Module title
+        nvgFontSize(args.vg, 12);
+        nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
+        nvgText(args.vg, mm2px(60.96), mm2px(2), "STRANGE WEATHER", NULL);
+
+        // Column headers
+        nvgFontSize(args.vg, 8);
+        nvgFillColor(args.vg, nvgRGB(0x44, 0x44, 0x44));
+        float headerY = mm2px(14);
+        nvgText(args.vg, mm2px(38), headerY, "RATE", NULL);
+        nvgText(args.vg, mm2px(48), headerY, "RNG", NULL);
+        nvgText(args.vg, mm2px(58), headerY, "SHAPE", NULL);
+        nvgText(args.vg, mm2px(68), headerY, "VOLT", NULL);
+        nvgText(args.vg, mm2px(78), headerY, "CHAOS", NULL);
+        nvgText(args.vg, mm2px(90), headerY, "x", NULL);
+        nvgText(args.vg, mm2px(98), headerY, "y", NULL);
+        nvgText(args.vg, mm2px(106), headerY, "z", NULL);
+        nvgText(args.vg, mm2px(114), headerY, "SUM", NULL);
+
+        // Bank labels - single letters, right-aligned to left of controls
+        nvgFontSize(args.vg, 10);
+        nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
+        nvgFillColor(args.vg, nvgRGB(0x00, 0x99, 0x66));
+        nvgText(args.vg, mm2px(33), mm2px(24), "A", NULL);
+        nvgFillColor(args.vg, nvgRGB(0xcc, 0x88, 0x00));
+        nvgText(args.vg, mm2px(33), mm2px(48), "B", NULL);
+        nvgFillColor(args.vg, nvgRGB(0x88, 0x00, 0xcc));
+        nvgText(args.vg, mm2px(33), mm2px(72), "C", NULL);
+
+        // CYCLE and 3D labels
+        nvgFontSize(args.vg, 8);
+        nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
+        nvgFillColor(args.vg, nvgRGB(0x44, 0x44, 0x44));
+        nvgText(args.vg, mm2px(10), mm2px(57), "CYCLE", NULL);
+        nvgText(args.vg, mm2px(24), mm2px(57), "3D", NULL);
+
+        // Combined section
+        nvgFontSize(args.vg, 10);
+        nvgFillColor(args.vg, nvgRGB(0x99, 0x66, 0x00));
+        nvgText(args.vg, mm2px(20), mm2px(90), "COMBINED", NULL);
+
+        // Combined output labels
+        nvgFontSize(args.vg, 8);
+        nvgFillColor(args.vg, nvgRGB(0x44, 0x44, 0x44));
+        float combY = mm2px(93);
+        nvgText(args.vg, mm2px(42), combY, "SUM", NULL);
+        nvgText(args.vg, mm2px(56), combY, "RECT", NULL);
+        nvgText(args.vg, mm2px(70), combY, "INV", NULL);
+        nvgText(args.vg, mm2px(84), combY, "DIST", NULL);
+
+        // Legend at bottom
+        nvgFontSize(args.vg, 6);
+        nvgFillColor(args.vg, nvgRGB(0x88, 0x88, 0x88));
+        nvgText(args.vg, mm2px(60.96), mm2px(110), "SHAPE: Lorenz / Rossler / Thomas / Halvorsen", NULL);
+        nvgText(args.vg, mm2px(60.96), mm2px(114), "RANGE: Low(5-20m) / Med(1s-2m) / High(0.1-10s)", NULL);
+        nvgText(args.vg, mm2px(60.96), mm2px(118), "VOLT: +/-5V / +/-10V / 0-5V / 0-10V", NULL);
+
+        // Tagline
+        nvgFillColor(args.vg, nvgRGB(0xaa, 0xaa, 0xaa));
+        nvgText(args.vg, mm2px(60.96), mm2px(122), "chaos cv", NULL);
     }
 };
 
@@ -528,42 +850,71 @@ struct StrangeWeatherWidget : ModuleWidget {
         addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, 0)));
         addChild(createWidget<ScrewSilver>(Vec(RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
         addChild(createWidget<ScrewSilver>(Vec(box.size.x - 2 * RACK_GRID_WIDTH, RACK_GRID_HEIGHT - RACK_GRID_WIDTH)));
-        
-        // Display (top left)
+
+        // Panel labels (drawn with NanoVG)
+        PanelLabels* labels = new PanelLabels();
+        labels->box.pos = Vec(0, 0);
+        labels->box.size = box.size;
+        addChild(labels);
+
+        // Display (top left) - larger size for better visualization
         display = new AttractorDisplay();
-        display->box.pos = mm2px(Vec(3.0, 12.0));
-        display->box.size = mm2px(Vec(28.0, 28.0));
+        display->box.pos = mm2px(Vec(2.0, 10.0));
+        display->box.size = mm2px(Vec(33.0, 36.0));
         display->module = module;
         addChild(display);
         
-        // Cycle button (below display)
-        // We use a param that triggers cycleDisplay on change
-        addParam(createParamCentered<CycleButton>(mm2px(Vec(17.0, 45.0)), module, -1));
-        
-        // Bank A controls and outputs (y = 26mm center)
-        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(42.0, 26.0)), module, StrangeWeather::RATE_A_PARAM));
-        addParam(createParamCentered<CKSSFour>(mm2px(Vec(53.0, 26.0)), module, StrangeWeather::SHAPE_A_PARAM));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(66.0, 26.0)), module, StrangeWeather::A_X_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(74.0, 26.0)), module, StrangeWeather::A_Y_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(82.0, 26.0)), module, StrangeWeather::A_Z_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(90.0, 26.0)), module, StrangeWeather::A_SUM_OUTPUT));
-        
-        // Bank B controls and outputs (y = 44mm center)
-        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(42.0, 44.0)), module, StrangeWeather::RATE_B_PARAM));
-        addParam(createParamCentered<CKSSFour>(mm2px(Vec(53.0, 44.0)), module, StrangeWeather::SHAPE_B_PARAM));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(66.0, 44.0)), module, StrangeWeather::B_X_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(74.0, 44.0)), module, StrangeWeather::B_Y_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(82.0, 44.0)), module, StrangeWeather::B_Z_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(90.0, 44.0)), module, StrangeWeather::B_SUM_OUTPUT));
-        
-        // Bank C controls and outputs (y = 62mm center)
-        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(42.0, 62.0)), module, StrangeWeather::RATE_C_PARAM));
-        addParam(createParamCentered<CKSSFour>(mm2px(Vec(53.0, 62.0)), module, StrangeWeather::SHAPE_C_PARAM));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(66.0, 62.0)), module, StrangeWeather::C_X_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(74.0, 62.0)), module, StrangeWeather::C_Y_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(82.0, 62.0)), module, StrangeWeather::C_Z_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(90.0, 62.0)), module, StrangeWeather::C_SUM_OUTPUT));
-        
+        // Cycle button (below display) - not a param, just a widget
+        CycleButton* cycleBtn = new CycleButton();
+        cycleBtn->box.pos = mm2px(Vec(10.0, 52.0)).minus(cycleBtn->box.size.div(2));
+        cycleBtn->swModule = module;
+        addChild(cycleBtn);
+
+        // 3D toggle button (next to cycle button)
+        Toggle3DButton* toggle3DBtn = new Toggle3DButton();
+        toggle3DBtn->box.pos = mm2px(Vec(24.0, 52.0)).minus(toggle3DBtn->box.size.div(2));
+        toggle3DBtn->swModule = module;
+        addChild(toggle3DBtn);
+
+        // Layout: Each bank has Rate knob, Range toggle (3-pos), Shape toggle (4-pos),
+        //         Voltage toggle (4-pos), Chaos knob, then 4 outputs
+
+        // Bank A controls and outputs (y = 24mm center)
+        float yA = 24.0;
+        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.0, yA)), module, StrangeWeather::RATE_A_PARAM));
+        addParam(createParamCentered<CKSSThree>(mm2px(Vec(48.0, yA)), module, StrangeWeather::RANGE_A_PARAM));
+        addParam(createParamCentered<CKSSFour>(mm2px(Vec(58.0, yA)), module, StrangeWeather::SHAPE_A_PARAM));
+        addParam(createParamCentered<CKSSFour>(mm2px(Vec(68.0, yA)), module, StrangeWeather::VOLTAGE_A_PARAM));
+        addParam(createParamCentered<SmallKnob>(mm2px(Vec(78.0, yA)), module, StrangeWeather::CHAOS_A_PARAM));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(90.0, yA)), module, StrangeWeather::A_X_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(98.0, yA)), module, StrangeWeather::A_Y_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(106.0, yA)), module, StrangeWeather::A_Z_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(114.0, yA)), module, StrangeWeather::A_SUM_OUTPUT));
+
+        // Bank B controls and outputs (y = 48mm center)
+        float yB = 48.0;
+        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.0, yB)), module, StrangeWeather::RATE_B_PARAM));
+        addParam(createParamCentered<CKSSThree>(mm2px(Vec(48.0, yB)), module, StrangeWeather::RANGE_B_PARAM));
+        addParam(createParamCentered<CKSSFour>(mm2px(Vec(58.0, yB)), module, StrangeWeather::SHAPE_B_PARAM));
+        addParam(createParamCentered<CKSSFour>(mm2px(Vec(68.0, yB)), module, StrangeWeather::VOLTAGE_B_PARAM));
+        addParam(createParamCentered<SmallKnob>(mm2px(Vec(78.0, yB)), module, StrangeWeather::CHAOS_B_PARAM));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(90.0, yB)), module, StrangeWeather::B_X_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(98.0, yB)), module, StrangeWeather::B_Y_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(106.0, yB)), module, StrangeWeather::B_Z_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(114.0, yB)), module, StrangeWeather::B_SUM_OUTPUT));
+
+        // Bank C controls and outputs (y = 72mm center)
+        float yC = 72.0;
+        addParam(createParamCentered<RoundBlackKnob>(mm2px(Vec(38.0, yC)), module, StrangeWeather::RATE_C_PARAM));
+        addParam(createParamCentered<CKSSThree>(mm2px(Vec(48.0, yC)), module, StrangeWeather::RANGE_C_PARAM));
+        addParam(createParamCentered<CKSSFour>(mm2px(Vec(58.0, yC)), module, StrangeWeather::SHAPE_C_PARAM));
+        addParam(createParamCentered<CKSSFour>(mm2px(Vec(68.0, yC)), module, StrangeWeather::VOLTAGE_C_PARAM));
+        addParam(createParamCentered<SmallKnob>(mm2px(Vec(78.0, yC)), module, StrangeWeather::CHAOS_C_PARAM));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(90.0, yC)), module, StrangeWeather::C_X_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(98.0, yC)), module, StrangeWeather::C_Y_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(106.0, yC)), module, StrangeWeather::C_Z_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(114.0, yC)), module, StrangeWeather::C_SUM_OUTPUT));
+
         // Combined outputs (y = 100mm center)
         addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(42.0, 100.0)), module, StrangeWeather::COMB_SUM_OUTPUT));
         addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(56.0, 100.0)), module, StrangeWeather::COMB_RECT_OUTPUT));
@@ -581,20 +932,19 @@ struct StrangeWeatherWidget : ModuleWidget {
     void appendContextMenu(Menu* menu) override {
         StrangeWeather* module = dynamic_cast<StrangeWeather*>(this->module);
         if (!module) return;
-        
+
         menu->addChild(new MenuSeparator());
         menu->addChild(createMenuLabel("Display"));
-        
+
         menu->addChild(createIndexSubmenuItem("View",
             {"Bank A", "Bank B", "Bank C", "Combined", "All"},
             [=]() { return module->displayMode; },
             [=](int mode) { module->displayMode = mode; }
         ));
+
+        menu->addChild(createBoolPtrMenuItem("3D Rotation", "", &module->display3D));
     }
 };
 
-
-// Note: CKSSFour doesn't exist in standard VCV, we'll need to create one
-// or use a different switch type. For now this will need adjustment.
 
 Model* modelStrangeWeather = createModel<StrangeWeather, StrangeWeatherWidget>("StrangeWeather");

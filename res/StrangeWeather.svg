@@ -1,52 +1,57 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="101.6mm" height="128.5mm" viewBox="0 0 101.6 128.5">
-  <!-- Strange Weather VCV Rack Panel - 20 HP -->
-  
+<svg xmlns="http://www.w3.org/2000/svg" width="121.92mm" height="128.5mm" viewBox="0 0 121.92 128.5">
+  <!-- Strange Weather VCV Rack Panel - 24 HP -->
+
   <!-- Panel background -->
-  <rect x="0" y="0" width="101.6" height="128.5" fill="#f0ece4"/>
-  
+  <rect x="0" y="0" width="121.92" height="128.5" fill="#f0ece4"/>
+
   <!-- Module name -->
-  <text x="50.8" y="8" font-family="Helvetica, Arial, sans-serif" font-size="4.5" fill="#222" text-anchor="middle" font-weight="bold">STRANGE WEATHER</text>
-  
+  <text x="60.96" y="8" font-family="Helvetica, Arial, sans-serif" font-size="4.5" fill="#222" text-anchor="middle" font-weight="bold">STRANGE WEATHER</text>
+
   <!-- Screen bezel (display drawn by code) -->
-  <rect x="3" y="12" width="28" height="28" rx="1" fill="#111" stroke="#333" stroke-width="0.3"/>
-  
+  <rect x="2" y="10" width="33" height="36" rx="1" fill="#111" stroke="#333" stroke-width="0.3"/>
+
   <!-- CYCLE label -->
   <text x="17" y="48" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#333" text-anchor="middle">CYCLE</text>
-  
+
   <!-- Column headers -->
-  <text x="42" y="17" font-family="Helvetica, Arial, sans-serif" font-size="2.2" fill="#444" text-anchor="middle">RATE</text>
-  <text x="53" y="17" font-family="Helvetica, Arial, sans-serif" font-size="2.2" fill="#444" text-anchor="middle">SHAPE</text>
-  <text x="66" y="17" font-family="Helvetica, Arial, sans-serif" font-size="2.2" fill="#444" text-anchor="middle">x</text>
-  <text x="74" y="17" font-family="Helvetica, Arial, sans-serif" font-size="2.2" fill="#444" text-anchor="middle">y</text>
-  <text x="82" y="17" font-family="Helvetica, Arial, sans-serif" font-size="2.2" fill="#444" text-anchor="middle">z</text>
-  <text x="90" y="17" font-family="Helvetica, Arial, sans-serif" font-size="2.2" fill="#444" text-anchor="middle">Σ</text>
-  
+  <text x="38" y="15" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">RATE</text>
+  <text x="48" y="15" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">RNG</text>
+  <text x="58" y="15" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">SHAPE</text>
+  <text x="68" y="15" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">VOLT</text>
+  <text x="78" y="15" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">CHAOS</text>
+  <text x="90" y="15" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">x</text>
+  <text x="98" y="15" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">y</text>
+  <text x="106" y="15" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">z</text>
+  <text x="114" y="15" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">SUM</text>
+
   <!-- Bank A label -->
-  <text x="35" y="27.5" font-family="Helvetica, Arial, sans-serif" font-size="4" fill="#007755" text-anchor="end" font-weight="bold">A</text>
-  
+  <text x="33" y="25.5" font-family="Helvetica, Arial, sans-serif" font-size="4" fill="#00aa77" text-anchor="end" font-weight="bold">A</text>
+
   <!-- Bank B label -->
-  <text x="35" y="45.5" font-family="Helvetica, Arial, sans-serif" font-size="4" fill="#007755" text-anchor="end" font-weight="bold">B</text>
-  
+  <text x="33" y="49.5" font-family="Helvetica, Arial, sans-serif" font-size="4" fill="#ffaa00" text-anchor="end" font-weight="bold">B</text>
+
   <!-- Bank C label -->
-  <text x="35" y="63.5" font-family="Helvetica, Arial, sans-serif" font-size="4" fill="#007755" text-anchor="end" font-weight="bold">C</text>
-  
+  <text x="33" y="73.5" font-family="Helvetica, Arial, sans-serif" font-size="4" fill="#aa00ff" text-anchor="end" font-weight="bold">C</text>
+
   <!-- Divider line -->
-  <line x1="5" y1="74" x2="96.6" y2="74" stroke="#ccc" stroke-width="0.3"/>
-  
+  <line x1="5" y1="84" x2="116.92" y2="84" stroke="#ccc" stroke-width="0.3"/>
+
   <!-- COMBINED label -->
-  <text x="20" y="84" font-family="Helvetica, Arial, sans-serif" font-size="3" fill="#996600" text-anchor="middle" font-weight="bold">COMBINED</text>
-  
+  <text x="20" y="94" font-family="Helvetica, Arial, sans-serif" font-size="3" fill="#996600" text-anchor="middle" font-weight="bold">COMBINED</text>
+
   <!-- Combined output labels -->
-  <text x="42" y="93" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">Σ</text>
-  <text x="56" y="93" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">|Σ|</text>
-  <text x="70" y="93" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">−Σ</text>
-  <text x="84" y="93" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">INV</text>
-  
-  <!-- Shape switch legend -->
-  <text x="50.8" y="114" font-family="Helvetica, Arial, sans-serif" font-size="1.8" fill="#888" text-anchor="middle">L=Lorenz  R=Rössler  T=Thomas  H=Halvorsen</text>
-  
+  <text x="42" y="93" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">SUM</text>
+  <text x="56" y="93" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">RECT</text>
+  <text x="70" y="93" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">INV</text>
+  <text x="84" y="93" font-family="Helvetica, Arial, sans-serif" font-size="2" fill="#444" text-anchor="middle">DIST</text>
+
+  <!-- Legend -->
+  <text x="60.96" y="114" font-family="Helvetica, Arial, sans-serif" font-size="1.6" fill="#888" text-anchor="middle">SHAPE: Lorenz / Rossler / Thomas / Halvorsen</text>
+  <text x="60.96" y="118" font-family="Helvetica, Arial, sans-serif" font-size="1.6" fill="#888" text-anchor="middle">RANGE: Low (5-20m) / Med (1s-2m) / High (0.1-10s)</text>
+  <text x="60.96" y="122" font-family="Helvetica, Arial, sans-serif" font-size="1.6" fill="#888" text-anchor="middle">VOLT: +/-5V / +/-10V / 0-5V / 0-10V</text>
+
   <!-- Tagline -->
-  <text x="50.8" y="120" font-family="Helvetica, Arial, sans-serif" font-size="1.8" fill="#aaa" text-anchor="middle">chaos cv</text>
-  
+  <text x="60.96" y="126" font-family="Helvetica, Arial, sans-serif" font-size="1.8" fill="#aaa" text-anchor="middle">chaos cv</text>
+
 </svg>

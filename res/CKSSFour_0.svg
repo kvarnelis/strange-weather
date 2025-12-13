@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="8.4mm" height="22mm" viewBox="0 0 8.4 22">
+  <!-- Background slot -->
+  <rect x="2.7" y="1" width="3" height="20" rx="1.5" fill="#1a1a1a" stroke="#333" stroke-width="0.3"/>
+
+  <!-- Position markers -->
+  <rect x="1.5" y="2.5" width="1" height="0.5" fill="#555"/>
+  <rect x="1.5" y="7.5" width="1" height="0.5" fill="#555"/>
+  <rect x="1.5" y="12.5" width="1" height="0.5" fill="#555"/>
+  <rect x="1.5" y="17.5" width="1" height="0.5" fill="#555"/>
+
+  <rect x="5.9" y="2.5" width="1" height="0.5" fill="#555"/>
+  <rect x="5.9" y="7.5" width="1" height="0.5" fill="#555"/>
+  <rect x="5.9" y="12.5" width="1" height="0.5" fill="#555"/>
+  <rect x="5.9" y="17.5" width="1" height="0.5" fill="#555"/>
+
+  <!-- Toggle lever - Position 0 (top) -->
+  <rect x="1.2" y="1.5" width="6" height="4" rx="0.8" fill="#ddd" stroke="#999" stroke-width="0.2"/>
+  <rect x="1.7" y="2" width="5" height="3" rx="0.5" fill="url(#lever)"/>
+
+  <defs>
+    <linearGradient id="lever" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#f5f5f5"/>
+      <stop offset="50%" style="stop-color:#ccc"/>
+      <stop offset="100%" style="stop-color:#999"/>
+    </linearGradient>
+  </defs>
+</svg>
