@@ -4,13 +4,13 @@ A chaotic CV generator for VCV Rack 2 based on strange attractors.
 
 ## Overview
 
-Strange Weather generates continuously evolving control voltages using mathematical chaos. Three independent attractor banks produce deterministic but unpredictable modulation — not random, but impossible to predict.
+Strange Weather generates continuously evolving control voltages using mathematical chaos. Four independent attractor banks produce deterministic but unpredictable modulation — not random, but impossible to predict.
 
 ## Features
 
-- **3 Independent Banks** — Each runs its own strange attractor
+- **4 Independent Banks** — Each runs its own strange attractor
 - **4 Attractor Types** — Lorenz, Rossler, Thomas, Halvorsen
-- **16 CV Outputs** — 4 per bank + 4 combined
+- **20 CV Outputs** — 4 per bank + 4 combined
 - **Real-time Visualization** — Watch the attractors evolve
 - **3 Display Modes** — Trace (lines), Lissajous (phosphor dots), Scope (waveforms)
 - **3D Display Mode** — See the full three-dimensional structure with rotation
@@ -57,7 +57,7 @@ cp -r res ~/Library/Application\ Support/Rack2/plugins-mac-arm64/StrangeWeather/
 
 ## Controls
 
-### Per Bank (A, B, C)
+### Per Bank (A, B, C, D)
 
 | Control | Function |
 |---------|----------|
@@ -78,10 +78,10 @@ cp -r res ~/Library/Application\ Support/Rack2/plugins-mac-arm64/StrangeWeather/
 - **DIST** — Inverse distance from center
 
 ### Display Controls
-- **CYCLE** — Cycles through views: A, B, C, Combined, All
+- **CYCLE** — Cycles through views: A, B, C, D, Combined, All
 - **MODE** — Cycles display style: Trace (lines), Lissajous (tiny dots), Scope (time-based waveforms)
 - **3D** — Toggles 3D rotation view
-- **TRAIL** — Adjusts trail length from ~1 second to ~34 seconds of history
+- **TRAIL** — Adjusts trail length from ~1 second to ~68 seconds of history
 
 ## Attractor Types
 
