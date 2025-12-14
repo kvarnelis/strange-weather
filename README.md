@@ -2,6 +2,7 @@
 
 A chaotic CV generator for VCV Rack 2 based on strange attractors.
 
+![strange weather 4](https://github.com/user-attachments/assets/d522df1a-22c2-4fc3-adb0-98394b366680)
 ## Overview
 
 Strange Weather generates continuously evolving control voltages using mathematical chaos. Four independent attractor banks produce deterministic but unpredictable modulation — not random, but impossible to predict.
