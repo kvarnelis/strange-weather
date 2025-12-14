@@ -30,7 +30,7 @@ jobs:
             rack-os: lin
             rack-arch: x64
           - platform: macos-x64
-            os: macos-15-large
+            os: macos-13
             rack-os: mac
             rack-arch: x64
           - platform: macos-arm64
