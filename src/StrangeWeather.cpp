@@ -151,18 +151,23 @@ struct StrangeWeather : Module {
         RATE_A_PARAM,
         RATE_B_PARAM,
         RATE_C_PARAM,
+        RATE_D_PARAM,
         SHAPE_A_PARAM,
         SHAPE_B_PARAM,
         SHAPE_C_PARAM,
+        SHAPE_D_PARAM,
         RANGE_A_PARAM,
         RANGE_B_PARAM,
         RANGE_C_PARAM,
+        RANGE_D_PARAM,
         VOLTAGE_A_PARAM,
         VOLTAGE_B_PARAM,
         VOLTAGE_C_PARAM,
+        VOLTAGE_D_PARAM,
         CHAOS_A_PARAM,
         CHAOS_B_PARAM,
         CHAOS_C_PARAM,
+        CHAOS_D_PARAM,
         TRAIL_PARAM,
         NUM_PARAMS
     };
@@ -187,6 +192,11 @@ struct StrangeWeather : Module {
         C_Y_OUTPUT,
         C_Z_OUTPUT,
         C_SUM_OUTPUT,
+        // Bank D
+        D_X_OUTPUT,
+        D_Y_OUTPUT,
+        D_Z_OUTPUT,
+        D_SUM_OUTPUT,
         // Combined
         COMB_SUM_OUTPUT,
         COMB_RECT_OUTPUT,
@@ -199,24 +209,24 @@ struct StrangeWeather : Module {
         NUM_LIGHTS
     };
     
-    // Three attractor banks
-    Attractor attractors[3];
+    // Four attractor banks
+    Attractor attractors[4];
 
     // Smoothed outputs (one-pole lowpass)
-    float smoothedX[3] = {0.f, 0.f, 0.f};
-    float smoothedY[3] = {0.f, 0.f, 0.f};
-    float smoothedZ[3] = {0.f, 0.f, 0.f};
+    float smoothedX[4] = {0.f, 0.f, 0.f, 0.f};
+    float smoothedY[4] = {0.f, 0.f, 0.f, 0.f};
+    float smoothedZ[4] = {0.f, 0.f, 0.f, 0.f};
 
     // Display state
-    int displayMode = 4; // 0=A, 1=B, 2=C, 3=Combined, 4=All
+    int displayMode = 5; // 0=A, 1=B, 2=C, 3=D, 4=Combined, 5=All
     bool display3D = false; // Toggle between 2D and 3D view
     int displayStyle = 0; // 0=Trace, 1=Lissajous (tiny dots), 2=Scope
 
     // Trail history for display (ring buffer)
-    static const int MAX_TRAIL_LENGTH = 2048;
-    float trailX[3][MAX_TRAIL_LENGTH] = {};
-    float trailY[3][MAX_TRAIL_LENGTH] = {};
-    float trailZ[3][MAX_TRAIL_LENGTH] = {};
+    static const int MAX_TRAIL_LENGTH = 4096;
+    float trailX[4][MAX_TRAIL_LENGTH] = {};
+    float trailY[4][MAX_TRAIL_LENGTH] = {};
+    float trailZ[4][MAX_TRAIL_LENGTH] = {};
     int trailIndex = 0;
 
     // Combined trail
@@ -234,29 +244,34 @@ struct StrangeWeather : Module {
         configParam(RATE_A_PARAM, 0.f, 1.f, 0.5f, "Rate A");
         configParam(RATE_B_PARAM, 0.f, 1.f, 0.5f, "Rate B");
         configParam(RATE_C_PARAM, 0.f, 1.f, 0.5f, "Rate C");
+        configParam(RATE_D_PARAM, 0.f, 1.f, 0.5f, "Rate D");
 
         // Range switches (0=Low, 1=Med, 2=High)
         configSwitch(RANGE_A_PARAM, 0.f, 2.f, 1.f, "Range A", {"Low (5-20 min)", "Med (1s-2min)", "High (0.1-10s)"});
         configSwitch(RANGE_B_PARAM, 0.f, 2.f, 1.f, "Range B", {"Low (5-20 min)", "Med (1s-2min)", "High (0.1-10s)"});
         configSwitch(RANGE_C_PARAM, 0.f, 2.f, 1.f, "Range C", {"Low (5-20 min)", "Med (1s-2min)", "High (0.1-10s)"});
+        configSwitch(RANGE_D_PARAM, 0.f, 2.f, 1.f, "Range D", {"Low (5-20 min)", "Med (1s-2min)", "High (0.1-10s)"});
 
         // Shape switches (0-3)
         configSwitch(SHAPE_A_PARAM, 0.f, 3.f, 0.f, "Shape A", {"Lorenz", "Rössler", "Thomas", "Halvorsen"});
         configSwitch(SHAPE_B_PARAM, 0.f, 3.f, 1.f, "Shape B", {"Lorenz", "Rössler", "Thomas", "Halvorsen"});
         configSwitch(SHAPE_C_PARAM, 0.f, 3.f, 2.f, "Shape C", {"Lorenz", "Rössler", "Thomas", "Halvorsen"});
+        configSwitch(SHAPE_D_PARAM, 0.f, 3.f, 3.f, "Shape D", {"Lorenz", "Rössler", "Thomas", "Halvorsen"});
 
         // Voltage switches (0=±5V, 1=±10V, 2=0-5V, 3=0-10V)
         configSwitch(VOLTAGE_A_PARAM, 0.f, 3.f, 0.f, "Voltage A", {"±5V", "±10V", "0-5V", "0-10V"});
         configSwitch(VOLTAGE_B_PARAM, 0.f, 3.f, 0.f, "Voltage B", {"±5V", "±10V", "0-5V", "0-10V"});
         configSwitch(VOLTAGE_C_PARAM, 0.f, 3.f, 0.f, "Voltage C", {"±5V", "±10V", "0-5V", "0-10V"});
+        configSwitch(VOLTAGE_D_PARAM, 0.f, 3.f, 0.f, "Voltage D", {"±5V", "±10V", "0-5V", "0-10V"});
 
         // Chaos knobs (0-1)
         configParam(CHAOS_A_PARAM, 0.f, 1.f, 0.5f, "Chaos A", "%", 0.f, 100.f);
         configParam(CHAOS_B_PARAM, 0.f, 1.f, 0.5f, "Chaos B", "%", 0.f, 100.f);
         configParam(CHAOS_C_PARAM, 0.f, 1.f, 0.5f, "Chaos C", "%", 0.f, 100.f);
+        configParam(CHAOS_D_PARAM, 0.f, 1.f, 0.5f, "Chaos D", "%", 0.f, 100.f);
 
-        // Trail length knob (64-2048)
-        configParam(TRAIL_PARAM, 0.f, 1.f, 0.5f, "Trail Length", "", 0.f, 1.f);
+        // Trail length knob (64-4096)
+        configParam(TRAIL_PARAM, 0.f, 1.f, 0.7f, "Trail Length", "", 0.f, 1.f);
 
         // Output labels
         configOutput(A_X_OUTPUT, "Bank A X");
@@ -271,6 +286,10 @@ struct StrangeWeather : Module {
         configOutput(C_Y_OUTPUT, "Bank C Y");
         configOutput(C_Z_OUTPUT, "Bank C Z");
         configOutput(C_SUM_OUTPUT, "Bank C Sum");
+        configOutput(D_X_OUTPUT, "Bank D X");
+        configOutput(D_Y_OUTPUT, "Bank D Y");
+        configOutput(D_Z_OUTPUT, "Bank D Z");
+        configOutput(D_SUM_OUTPUT, "Bank D Sum");
         configOutput(COMB_SUM_OUTPUT, "Combined Sum");
         configOutput(COMB_RECT_OUTPUT, "Combined Rectified");
         configOutput(COMB_INV_OUTPUT, "Combined Inverted");
@@ -278,18 +297,18 @@ struct StrangeWeather : Module {
     }
     
     void cycleDisplay() {
-        displayMode = (displayMode + 1) % 5;
+        displayMode = (displayMode + 1) % 6;
     }
 
     void cycleDisplayStyle() {
         displayStyle = (displayStyle + 1) % 3;
     }
 
-    // Get current trail length from param (64 to 2048)
+    // Get current trail length from param (64 to 4096)
     int getTrailLength() {
         float knob = params[TRAIL_PARAM].getValue();
-        // Exponential scaling: 64 at 0, 2048 at 1
-        return (int)(64.f * std::pow(32.f, knob));
+        // Exponential scaling: 64 at 0, 4096 at 1
+        return (int)(64.f * std::pow(64.f, knob));
     }
 
     // Helper to calculate rate from range and knob
@@ -320,15 +339,15 @@ struct StrangeWeather : Module {
         float smoothCoeff = 6.0f / args.sampleRate;  // ~125ms time constant
 
         // Process each bank
-        int rangeParams[3] = {RANGE_A_PARAM, RANGE_B_PARAM, RANGE_C_PARAM};
-        int rateParams[3] = {RATE_A_PARAM, RATE_B_PARAM, RATE_C_PARAM};
-        int shapeParams[3] = {SHAPE_A_PARAM, SHAPE_B_PARAM, SHAPE_C_PARAM};
-        int voltageParams[3] = {VOLTAGE_A_PARAM, VOLTAGE_B_PARAM, VOLTAGE_C_PARAM};
-        int chaosParams[3] = {CHAOS_A_PARAM, CHAOS_B_PARAM, CHAOS_C_PARAM};
+        int rangeParams[4] = {RANGE_A_PARAM, RANGE_B_PARAM, RANGE_C_PARAM, RANGE_D_PARAM};
+        int rateParams[4] = {RATE_A_PARAM, RATE_B_PARAM, RATE_C_PARAM, RATE_D_PARAM};
+        int shapeParams[4] = {SHAPE_A_PARAM, SHAPE_B_PARAM, SHAPE_C_PARAM, SHAPE_D_PARAM};
+        int voltageParams[4] = {VOLTAGE_A_PARAM, VOLTAGE_B_PARAM, VOLTAGE_C_PARAM, VOLTAGE_D_PARAM};
+        int chaosParams[4] = {CHAOS_A_PARAM, CHAOS_B_PARAM, CHAOS_C_PARAM, CHAOS_D_PARAM};
 
-        float bankOutputs[3][4]; // [bank][x,y,z,sum]
+        float bankOutputs[4][4]; // [bank][x,y,z,sum]
 
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 4; i++) {
             // Get parameters
             int range = (int)params[rangeParams[i]].getValue();
             float rateKnob = params[rateParams[i]].getValue();
@@ -387,11 +406,17 @@ struct StrangeWeather : Module {
         outputs[C_Z_OUTPUT].setVoltage(bankOutputs[2][2]);
         outputs[C_SUM_OUTPUT].setVoltage(bankOutputs[2][3]);
 
+        // Bank D outputs
+        outputs[D_X_OUTPUT].setVoltage(bankOutputs[3][0]);
+        outputs[D_Y_OUTPUT].setVoltage(bankOutputs[3][1]);
+        outputs[D_Z_OUTPUT].setVoltage(bankOutputs[3][2]);
+        outputs[D_SUM_OUTPUT].setVoltage(bankOutputs[3][3]);
+
         // Combined outputs (using smoothed normalized values for consistency)
-        float combSum = bankOutputs[0][3] + bankOutputs[1][3] + bankOutputs[2][3];
-        float combRect = std::abs(bankOutputs[0][3]) + std::abs(bankOutputs[1][3]) + std::abs(bankOutputs[2][3]);
+        float combSum = bankOutputs[0][3] + bankOutputs[1][3] + bankOutputs[2][3] + bankOutputs[3][3];
+        float combRect = std::abs(bankOutputs[0][3]) + std::abs(bankOutputs[1][3]) + std::abs(bankOutputs[2][3]) + std::abs(bankOutputs[3][3]);
         float combInv = -combSum;
-        float combDist = 5.f - std::abs(bankOutputs[0][3]) - std::abs(bankOutputs[1][3]) - std::abs(bankOutputs[2][3]);
+        float combDist = 5.f - std::abs(bankOutputs[0][3]) - std::abs(bankOutputs[1][3]) - std::abs(bankOutputs[2][3]) - std::abs(bankOutputs[3][3]);
 
         outputs[COMB_SUM_OUTPUT].setVoltage(combSum);
         outputs[COMB_RECT_OUTPUT].setVoltage(combRect);
@@ -404,27 +429,25 @@ struct StrangeWeather : Module {
             trailCounter = 0;
             trailIndex = (trailIndex + 1) % MAX_TRAIL_LENGTH;
 
-            // Store smoothed normalized positions for display (-1 to 1 range)
-            trailX[0][trailIndex] = smoothedX[0];
-            trailY[0][trailIndex] = smoothedY[0];
-            trailZ[0][trailIndex] = smoothedZ[0];
-            trailX[1][trailIndex] = smoothedX[1];
-            trailY[1][trailIndex] = smoothedY[1];
-            trailZ[1][trailIndex] = smoothedZ[1];
-            trailX[2][trailIndex] = smoothedX[2];
-            trailY[2][trailIndex] = smoothedY[2];
-            trailZ[2][trailIndex] = smoothedZ[2];
+            // Store smoothed normalized positions for display (-1 to 1 range, clamped)
+            for (int i = 0; i < 4; i++) {
+                trailX[i][trailIndex] = clamp(smoothedX[i], -1.f, 1.f);
+                trailY[i][trailIndex] = clamp(smoothedY[i], -1.f, 1.f);
+                trailZ[i][trailIndex] = clamp(smoothedZ[i], -1.f, 1.f);
+            }
 
             // Combined: use sum and rectified sum as x,y,z
             float normSum = (smoothedX[0] + smoothedY[0] + smoothedZ[0] +
                             smoothedX[1] + smoothedY[1] + smoothedZ[1] +
-                            smoothedX[2] + smoothedY[2] + smoothedZ[2]) / 9.f;
+                            smoothedX[2] + smoothedY[2] + smoothedZ[2] +
+                            smoothedX[3] + smoothedY[3] + smoothedZ[3]) / 12.f;
             float normRect = (std::abs(smoothedX[0]) + std::abs(smoothedY[0]) + std::abs(smoothedZ[0]) +
                              std::abs(smoothedX[1]) + std::abs(smoothedY[1]) + std::abs(smoothedZ[1]) +
-                             std::abs(smoothedX[2]) + std::abs(smoothedY[2]) + std::abs(smoothedZ[2])) / 9.f;
+                             std::abs(smoothedX[2]) + std::abs(smoothedY[2]) + std::abs(smoothedZ[2]) +
+                             std::abs(smoothedX[3]) + std::abs(smoothedY[3]) + std::abs(smoothedZ[3])) / 12.f;
             combTrailX[trailIndex] = clamp(normSum, -1.f, 1.f);
             combTrailY[trailIndex] = clamp(normRect * 2.f - 1.f, -1.f, 1.f);
-            combTrailZ[trailIndex] = clamp((smoothedZ[0] + smoothedZ[1] + smoothedZ[2]) / 3.f, -1.f, 1.f);
+            combTrailZ[trailIndex] = clamp((smoothedZ[0] + smoothedZ[1] + smoothedZ[2] + smoothedZ[3]) / 4.f, -1.f, 1.f);
         }
     }
 
@@ -503,15 +526,15 @@ struct AttractorDisplay : Widget {
         nvgFontFaceId(args.vg, APP->window->uiFont->handle);
         nvgFillColor(args.vg, nvgRGBA(0xff, 0xff, 0xff, 0x88));
 
-        if (mode == 4) {
-            // All four views
+        if (mode == 5) {
+            // All four banks in quadrants (A, B, C, D)
             float w = box.size.x / 2.f;
             float h = box.size.y / 2.f;
 
             drawAttractor(args, 0, 0, 0, w, h, nvgRGB(0x00, 0xff, 0xaa), is3D);
             drawAttractor(args, 1, w, 0, w, h, nvgRGB(0xff, 0xaa, 0x00), is3D);
             drawAttractor(args, 2, 0, h, w, h, nvgRGB(0xaa, 0x00, 0xff), is3D);
-            drawCombined(args, w, h, w, h, nvgRGB(0xff, 0xff, 0xff), is3D);
+            drawAttractor(args, 3, w, h, w, h, nvgRGB(0xff, 0x00, 0x66), is3D);
 
             // Grid lines
             nvgBeginPath(args.vg);
@@ -529,9 +552,10 @@ struct AttractorDisplay : Widget {
             nvgText(args.vg, 3, h - 3, "A", NULL);
             nvgText(args.vg, w + 3, h - 3, "B", NULL);
             nvgText(args.vg, 3, box.size.y - 3, "C", NULL);
-            nvgText(args.vg, w + 3, box.size.y - 3, "MIX", NULL);
+            nvgText(args.vg, w + 3, box.size.y - 3, "D", NULL);
         }
-        else if (mode == 3) {
+        else if (mode == 4) {
+            // Combined view
             drawCombined(args, 0, 0, box.size.x, box.size.y, nvgRGB(0xff, 0xff, 0xff), is3D);
             // Label
             nvgFillColor(args.vg, nvgRGBA(0xff, 0xff, 0xff, 0x88));
@@ -539,12 +563,14 @@ struct AttractorDisplay : Widget {
             nvgText(args.vg, box.size.x - 3, 3, "MIX", NULL);
         }
         else {
-            NVGcolor colors[3] = {
+            // Single bank view (0=A, 1=B, 2=C, 3=D)
+            NVGcolor colors[4] = {
                 nvgRGB(0x00, 0xff, 0xaa),
                 nvgRGB(0xff, 0xaa, 0x00),
-                nvgRGB(0xaa, 0x00, 0xff)
+                nvgRGB(0xaa, 0x00, 0xff),
+                nvgRGB(0xff, 0x00, 0x66)
             };
-            const char* labels[3] = {"A", "B", "C"};
+            const char* labels[4] = {"A", "B", "C", "D"};
             drawAttractor(args, mode, 0, 0, box.size.x, box.size.y, colors[mode], is3D);
             // Label
             nvgFillColor(args.vg, nvgRGBA(0xff, 0xff, 0xff, 0x88));
@@ -588,7 +614,7 @@ struct AttractorDisplay : Widget {
 
         float cx = ox + w / 2.f;
         float cy = oy + h / 2.f;
-        float scale = std::min(w, h) / 2.f * 0.85f;
+        float scale = std::min(w, h) / 2.f * 0.75f;  // 75% to stay within bounds
 
         int idx = module->trailIndex;
         int style = module->displayStyle;
@@ -691,7 +717,7 @@ struct AttractorDisplay : Widget {
 
         float cx = ox + w / 2.f;
         float cy = oy + h / 2.f;
-        float scale = std::min(w, h) / 2.f * 0.85f;
+        float scale = std::min(w, h) / 2.f * 0.75f;  // 75% to stay within bounds
 
         int idx = module->trailIndex;
         int style = module->displayStyle;
@@ -895,7 +921,7 @@ struct PanelLabels : Widget {
         nvgText(args.vg, mm2px(182), headerY, "z", NULL);
         nvgText(args.vg, mm2px(194), headerY, "SUM", NULL);
 
-        // Bank labels - single letters, to left of controls (more room now)
+        // Bank labels - single letters, to left of controls
         nvgFontSize(args.vg, 10);
         nvgTextAlign(args.vg, NVG_ALIGN_RIGHT | NVG_ALIGN_MIDDLE);
         nvgFillColor(args.vg, nvgRGB(0x00, 0x99, 0x66));
@@ -904,38 +930,42 @@ struct PanelLabels : Widget {
         nvgText(args.vg, mm2px(77), mm2px(48), "B", NULL);
         nvgFillColor(args.vg, nvgRGB(0x88, 0x00, 0xcc));
         nvgText(args.vg, mm2px(77), mm2px(72), "C", NULL);
+        nvgFillColor(args.vg, nvgRGB(0xcc, 0x00, 0x44));
+        nvgText(args.vg, mm2px(77), mm2px(96), "D", NULL);
 
-        // CYCLE, MODE, 3D, and TRAIL labels (below display)
+        // CYCLE, MODE, 3D, and TRAIL labels (below display, centered on 35mm)
         nvgFontSize(args.vg, 8);
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
         nvgFillColor(args.vg, nvgRGB(0x44, 0x44, 0x44));
-        nvgText(args.vg, mm2px(10), mm2px(82), "CYCLE", NULL);
-        nvgText(args.vg, mm2px(25), mm2px(82), "MODE", NULL);
-        nvgText(args.vg, mm2px(40), mm2px(82), "3D", NULL);
-        nvgText(args.vg, mm2px(55), mm2px(82), "TRAIL", NULL);
+        nvgText(args.vg, mm2px(17.0), mm2px(82), "CYCLE", NULL);
+        nvgText(args.vg, mm2px(29.0), mm2px(82), "MODE", NULL);
+        nvgText(args.vg, mm2px(41.0), mm2px(82), "3D", NULL);
+        nvgText(args.vg, mm2px(53.0), mm2px(82), "TRAIL", NULL);
+
+        // Attractor type descriptions (under display, in line with COMBINED)
+        nvgFontSize(args.vg, 7);
+        nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+        nvgFillColor(args.vg, nvgRGB(0x55, 0x55, 0x55));
+        nvgText(args.vg, mm2px(5), mm2px(90), "LORENZ: Smooth two-lobed butterfly", NULL);
+        nvgText(args.vg, mm2px(5), mm2px(95), "ROSSLER: Asymmetric spiral, large excursions", NULL);
+        nvgText(args.vg, mm2px(5), mm2px(100), "THOMAS: Cyclically symmetric, smooth rolling", NULL);
+        nvgText(args.vg, mm2px(5), mm2px(105), "HALVORSEN: Sculptural, sharp transitions", NULL);
 
         // Combined section - label under RATE column, inline with jacks
         nvgFontSize(args.vg, 10);
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
         nvgFillColor(args.vg, nvgRGB(0x99, 0x66, 0x00));
-        nvgText(args.vg, mm2px(85), mm2px(100), "COMBINED", NULL);
+        nvgText(args.vg, mm2px(85), mm2px(120), "COMBINED", NULL);
 
         // Combined output labels
         nvgFontSize(args.vg, 8);
         nvgTextAlign(args.vg, NVG_ALIGN_CENTER | NVG_ALIGN_TOP);
         nvgFillColor(args.vg, nvgRGB(0x44, 0x44, 0x44));
-        float combY = mm2px(93);
+        float combY = mm2px(113);
         nvgText(args.vg, mm2px(115), combY, "SUM", NULL);
         nvgText(args.vg, mm2px(135), combY, "RECT", NULL);
         nvgText(args.vg, mm2px(155), combY, "INV", NULL);
         nvgText(args.vg, mm2px(175), combY, "DIST", NULL);
-
-        // Legend at bottom (centered, larger text)
-        nvgFontSize(args.vg, 8);
-        nvgFillColor(args.vg, nvgRGB(0x55, 0x55, 0x55));
-        nvgText(args.vg, mm2px(101.6), mm2px(109), "SHAPE: Lorenz / Rossler / Thomas / Halvorsen", NULL);
-        nvgText(args.vg, mm2px(101.6), mm2px(115), "RANGE: Low (5-20m) / Med (1s-2m) / High (0.1-10s)", NULL);
-        nvgText(args.vg, mm2px(101.6), mm2px(121), "VOLT: +/-5V / +/-10V / 0-5V / 0-10V", NULL);
     }
 };
 
@@ -966,26 +996,26 @@ struct StrangeWeatherWidget : ModuleWidget {
         display->module = module;
         addChild(display);
 
-        // Cycle button (below display)
+        // Cycle button (below display, centered on 35mm with 12mm spacing)
         CycleButton* cycleBtn = new CycleButton();
-        cycleBtn->box.pos = mm2px(Vec(10.0, 77.0)).minus(cycleBtn->box.size.div(2));
+        cycleBtn->box.pos = mm2px(Vec(17.0, 77.0)).minus(cycleBtn->box.size.div(2));
         cycleBtn->swModule = module;
         addChild(cycleBtn);
 
         // Mode button (cycles display style)
         ModeButton* modeBtn = new ModeButton();
-        modeBtn->box.pos = mm2px(Vec(25.0, 77.0)).minus(modeBtn->box.size.div(2));
+        modeBtn->box.pos = mm2px(Vec(29.0, 77.0)).minus(modeBtn->box.size.div(2));
         modeBtn->swModule = module;
         addChild(modeBtn);
 
         // 3D toggle button
         Toggle3DButton* toggle3DBtn = new Toggle3DButton();
-        toggle3DBtn->box.pos = mm2px(Vec(40.0, 77.0)).minus(toggle3DBtn->box.size.div(2));
+        toggle3DBtn->box.pos = mm2px(Vec(41.0, 77.0)).minus(toggle3DBtn->box.size.div(2));
         toggle3DBtn->swModule = module;
         addChild(toggle3DBtn);
 
         // Trail length knob
-        addParam(createParamCentered<Trimpot>(mm2px(Vec(55.0, 77.0)), module, StrangeWeather::TRAIL_PARAM));
+        addParam(createParamCentered<Trimpot>(mm2px(Vec(53.0, 77.0)), module, StrangeWeather::TRAIL_PARAM));
 
         // Layout: Each bank has Rate knob, Range toggle (3-pos), Shape toggle (4-pos),
         //         Voltage toggle (4-pos), Chaos knob, then 4 outputs
@@ -1028,11 +1058,23 @@ struct StrangeWeatherWidget : ModuleWidget {
         addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(182.0, yC)), module, StrangeWeather::C_Z_OUTPUT));
         addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(194.0, yC)), module, StrangeWeather::C_SUM_OUTPUT));
 
-        // Combined outputs (y = 100mm center, shifted right)
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(115.0, 100.0)), module, StrangeWeather::COMB_SUM_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(135.0, 100.0)), module, StrangeWeather::COMB_RECT_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(155.0, 100.0)), module, StrangeWeather::COMB_INV_OUTPUT));
-        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(175.0, 100.0)), module, StrangeWeather::COMB_DIST_OUTPUT));
+        // Bank D controls and outputs (y = 96mm center)
+        float yD = 96.0;
+        addParam(createParamCentered<DaviesKnob>(mm2px(Vec(85.0, yD)), module, StrangeWeather::RATE_D_PARAM));
+        addParam(createParamCentered<CKSSThree>(mm2px(Vec(100.0, yD)), module, StrangeWeather::RANGE_D_PARAM));
+        addParam(createParamCentered<CKSSFour>(mm2px(Vec(112.0, yD)), module, StrangeWeather::SHAPE_D_PARAM));
+        addParam(createParamCentered<CKSSFour>(mm2px(Vec(124.0, yD)), module, StrangeWeather::VOLTAGE_D_PARAM));
+        addParam(createParamCentered<DaviesKnob>(mm2px(Vec(139.0, yD)), module, StrangeWeather::CHAOS_D_PARAM));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(158.0, yD)), module, StrangeWeather::D_X_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(170.0, yD)), module, StrangeWeather::D_Y_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(182.0, yD)), module, StrangeWeather::D_Z_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(194.0, yD)), module, StrangeWeather::D_SUM_OUTPUT));
+
+        // Combined outputs (y = 120mm center, shifted right)
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(115.0, 120.0)), module, StrangeWeather::COMB_SUM_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(135.0, 120.0)), module, StrangeWeather::COMB_RECT_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(155.0, 120.0)), module, StrangeWeather::COMB_INV_OUTPUT));
+        addOutput(createOutputCentered<PJ301MPort>(mm2px(Vec(175.0, 120.0)), module, StrangeWeather::COMB_DIST_OUTPUT));
     }
     
     void step() override {
@@ -1050,7 +1092,7 @@ struct StrangeWeatherWidget : ModuleWidget {
         menu->addChild(createMenuLabel("Display"));
 
         menu->addChild(createIndexSubmenuItem("View",
-            {"Bank A", "Bank B", "Bank C", "Combined", "All"},
+            {"Bank A", "Bank B", "Bank C", "Bank D", "Combined", "All"},
             [=]() { return module->displayMode; },
             [=](int mode) { module->displayMode = mode; }
         ));
