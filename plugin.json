@@ -16,7 +16,7 @@
     {
       "slug": "StrangeWeather",
       "name": "Strange Weather",
-      "description": "Chaotic CV generator based on strange attractors. Four independent attractor banks (Lorenz, Rössler, Thomas, Halvorsen) produce 20 continuously evolving, deterministic control voltages.",
+      "description": "Chaotic CV generator based on strange attractors. Four independent attractor banks (Sprott B, Rössler, Thomas, Dadras) produce 20 continuously evolving, deterministic control voltages.",
       "tags": [
         "LFO",
         "Random",

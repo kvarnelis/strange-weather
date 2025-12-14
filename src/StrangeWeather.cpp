@@ -2,7 +2,7 @@
  * Strange Weather - Chaotic CV Generator
  * 
  * Three independent strange attractor banks producing 16 CV outputs.
- * Based on Lorenz, Rössler, Thomas, and Halvorsen attractors.
+ * Based on Sprott B, Rössler, Thomas, and Dadras attractors.
  */
 
 #include "plugin.hpp"
@@ -10,10 +10,10 @@
 
 // Attractor types
 enum AttractorType {
-    LORENZ = 0,
+    SPROTT_B = 0,
     ROSSLER = 1,
     THOMAS = 2,
-    HALVORSEN = 3
+    DADRAS = 3
 };
 
 // Attractor state and parameters
@@ -27,10 +27,10 @@ struct Attractor {
 
         double boundLimit() const {
             switch (type) {
-                case LORENZ: return 35.0;   // Rossler-like span
+                case SPROTT_B: return 5.0;  // Sprott B is compact
                 case ROSSLER: return 35.0;
                 case THOMAS: return 8.0;
-                case HALVORSEN: return 30.0;
+                case DADRAS: return 15.0;  // Tighter bounds for stability
             }
         return 35.0;
         }
@@ -51,7 +51,7 @@ struct Attractor {
     }
 
     Attractor() {
-        type = LORENZ;
+        type = SPROTT_B;
         resetState();
     }
 
@@ -61,11 +61,11 @@ struct Attractor {
         int warmupSteps = 0;
         double warmupDt = 0.0;
         switch (type) {
-            case LORENZ:
-                // Currently running Rossler equations - use same init as ROSSLER
-                x = 0.1 + (random::uniform() - 0.5) * 0.02;
-                y = 0.1 + (random::uniform() - 0.5) * 0.02;
-                z = 0.0 + (random::uniform() - 0.5) * 0.02;
+            case SPROTT_B:
+                // Sprott B - compact attractor, start near origin
+                x = 0.1 + (random::uniform() - 0.5) * 0.1;
+                y = 0.1 + (random::uniform() - 0.5) * 0.1;
+                z = 0.1 + (random::uniform() - 0.5) * 0.1;
                 minX = maxX = x;
                 minY = maxY = y;
                 minZ = maxZ = z;
@@ -91,15 +91,15 @@ struct Attractor {
                 minZ = maxZ = z;
                 warmupSteps = 1500; warmupDt = 0.01;
                 break;
-            case HALVORSEN:
-                // Halvorsen: seed with some spread so it shows the sculptural folds quickly
-                x = 1.0 + (random::uniform() - 0.5) * 1.0;
-                y = -1.0 + (random::uniform() - 0.5) * 1.0;
-                z = 0.5 + (random::uniform() - 0.5) * 1.0;
+            case DADRAS:
+                // Dadras: start near attractor basin
+                x = 1.0 + (random::uniform() - 0.5) * 0.2;
+                y = 1.0 + (random::uniform() - 0.5) * 0.2;
+                z = 1.0 + (random::uniform() - 0.5) * 0.2;
                 minX = maxX = x;
                 minY = maxY = y;
                 minZ = maxZ = z;
-                warmupSteps = 3500; warmupDt = 0.02;
+                warmupSteps = 2000; warmupDt = 0.01;
                 break;
         }
         if (warmupSteps > 0 && warmupDt > 0.0) {
@@ -132,14 +132,11 @@ struct Attractor {
     // Compute derivatives for current state (chaos affects primary parameter)
     void derivatives(double& dx, double& dy, double& dz) {
         switch (type) {
-            case LORENZ: {
-                // Rossler (duplicate) parameters for bank A
-                const double a = 0.2;
-                const double b = 0.2;
-                const double c = 5.7 + chaos * 1.3;  // gentle variation
-                dx = -y - z;
-                dy = x + a * y;
-                dz = b + z * (x - c);
+            case SPROTT_B: {
+                // Sprott B - minimal chaotic system, no tunable parameters
+                dx = y * z;
+                dy = x - y;
+                dz = 1.0 - x * y;
                 break;
             }
             case ROSSLER: {
@@ -161,12 +158,16 @@ struct Attractor {
                 dz = std::sin(x) - b * z;
                 break;
             }
-            case HALVORSEN: {
-                // a varies with chaos: center near the canonical 1.89
-                const double a = 1.6 + chaos * 0.6;  // chaos: mild → aggressive
-                dx = -a * x - 4.0 * y - 4.0 * z - y * y;
-                dy = -a * y - 4.0 * z - 4.0 * x - z * z;
-                dz = -a * z - 4.0 * x - 4.0 * y - x * x;
+            case DADRAS: {
+                // Dadras attractor - multi-wing dynamics
+                const double a = 3.0;
+                const double b = 2.7;
+                const double c = 1.7 + chaos * 0.6;  // chaos varies c for different dynamics
+                const double d = 2.0;
+                const double e = 9.0;
+                dx = y - a * x + b * y * z;
+                dy = c * y - x * z + z;
+                dz = d * x * y - e * z;
                 break;
             }
         }
@@ -174,10 +175,12 @@ struct Attractor {
     
     // RK4 integration step
     void step(double dt) {
-        // Blow-up guard: if state became non-finite or absurdly large, re-seed to keep the display sane
+        // Blow-up guard: if state became non-finite or too large, re-seed
+        // Use tighter threshold (1000) to catch runaway before it causes issues
         if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
-            std::abs(x) > 1e6 || std::abs(y) > 1e6 || std::abs(z) > 1e6) {
+            std::abs(x) > 1000.0 || std::abs(y) > 1000.0 || std::abs(z) > 1000.0) {
             resetState();
+            return;  // Skip this step after reset
         }
 
         double k1x, k1y, k1z;
@@ -212,7 +215,7 @@ struct Attractor {
         x = ox + (dt / 6.0) * (k1x + 2.0 * k2x + 2.0 * k3x + k4x);
         y = oy + (dt / 6.0) * (k1y + 2.0 * k2y + 2.0 * k3y + k4y);
         z = oz + (dt / 6.0) * (k1z + 2.0 * k2z + 2.0 * k3z + k4z);
-        
+
         // Update bounding box - expand only
         minX = std::min(minX, x);
         maxX = std::max(maxX, x);
@@ -377,10 +380,10 @@ struct StrangeWeather : Module {
         configSwitch(RANGE_D_PARAM, 0.f, 2.f, 2.f, "Range D", {"Low (5-20 min)", "Med (1s-2min)", "High (0.1-10s)"});
 
         // Shape switches (0-3) - list is inverted because switch top=3, bottom=0
-        configSwitch(SHAPE_A_PARAM, 0.f, 3.f, 3.f, "Shape A", {"Halvorsen", "Thomas", "Rössler", "Lorenz"});
-        configSwitch(SHAPE_B_PARAM, 0.f, 3.f, 2.f, "Shape B", {"Halvorsen", "Thomas", "Rössler", "Lorenz"});
-        configSwitch(SHAPE_C_PARAM, 0.f, 3.f, 1.f, "Shape C", {"Halvorsen", "Thomas", "Rössler", "Lorenz"});
-        configSwitch(SHAPE_D_PARAM, 0.f, 3.f, 0.f, "Shape D", {"Halvorsen", "Thomas", "Rössler", "Lorenz"});
+        configSwitch(SHAPE_A_PARAM, 0.f, 3.f, 3.f, "Shape A", {"Dadras", "Thomas", "Rössler", "Sprott B"});
+        configSwitch(SHAPE_B_PARAM, 0.f, 3.f, 2.f, "Shape B", {"Dadras", "Thomas", "Rössler", "Sprott B"});
+        configSwitch(SHAPE_C_PARAM, 0.f, 3.f, 1.f, "Shape C", {"Dadras", "Thomas", "Rössler", "Sprott B"});
+        configSwitch(SHAPE_D_PARAM, 0.f, 3.f, 0.f, "Shape D", {"Dadras", "Thomas", "Rössler", "Sprott B"});
 
         // Voltage switches (0=±5V, 1=±10V, 2=0-5V, 3=0-10V)
         configSwitch(VOLTAGE_A_PARAM, 0.f, 3.f, 0.f, "Voltage A", {"±5V", "±10V", "0-5V", "0-10V"});
@@ -486,7 +489,7 @@ struct StrangeWeather : Module {
 
             // Set attractor type (resets state if changed) and chaos
             // Switch position is inverted from value (top=0, bottom=3 visually but value-wise top=3, bottom=0)
-            // Invert: 3-value so top position = Lorenz (0), bottom = Halvorsen (3)
+            // Invert: 3-value so top position = Sprott B (0), bottom = Dadras (3)
             int shapeValue = 3 - (int)params[shapeParams[i]].getValue();
             attractors[i].setType((AttractorType)shapeValue);
             attractors[i].chaos = params[chaosParams[i]].getValue();
@@ -499,8 +502,8 @@ struct StrangeWeather : Module {
             switch (attractors[i].type) {
                 case THOMAS: typeScale = 5.0f; break;   // Thomas is very slow
                 case ROSSLER: typeScale = 1.5f; break;  // Rossler is a bit slow
-                case LORENZ: typeScale = 1.5f; break;   // Currently running Rossler equations
-                case HALVORSEN: typeScale = 3.0f; break; // Halvorsen benefits from a faster sweep
+                case SPROTT_B: typeScale = 1.0f; break;  // Sprott B runs at normal speed
+                case DADRAS: typeScale = 0.5f; break; // Dadras needs slower integration for stability
             }
 
             // Adaptive time step
@@ -586,18 +589,18 @@ struct StrangeWeather : Module {
                         trailY[i][j] = displayY[i];
                         trailZ[i][j] = displayZ[i];
                     }
-                    // Combined
+                    // Combined - scale by 4 instead of 12 for more dynamic range
                     float normSum = (displayX[0] + displayY[0] + displayZ[0] +
                                     displayX[1] + displayY[1] + displayZ[1] +
                                     displayX[2] + displayY[2] + displayZ[2] +
-                                    displayX[3] + displayY[3] + displayZ[3]) / 12.f;
+                                    displayX[3] + displayY[3] + displayZ[3]) / 4.f;
                     float normRect = (std::abs(displayX[0]) + std::abs(displayY[0]) + std::abs(displayZ[0]) +
                                      std::abs(displayX[1]) + std::abs(displayY[1]) + std::abs(displayZ[1]) +
                                      std::abs(displayX[2]) + std::abs(displayY[2]) + std::abs(displayZ[2]) +
-                                     std::abs(displayX[3]) + std::abs(displayY[3]) + std::abs(displayZ[3])) / 12.f;
+                                     std::abs(displayX[3]) + std::abs(displayY[3]) + std::abs(displayZ[3])) / 4.f;
                     combTrailX[j] = clamp(normSum, -1.f, 1.f);
-                    combTrailY[j] = clamp(normRect * 2.f - 1.f, -1.f, 1.f);
-                    combTrailZ[j] = clamp((displayZ[0] + displayZ[1] + displayZ[2] + displayZ[3]) / 4.f, -1.f, 1.f);
+                    combTrailY[j] = clamp(normRect - 1.f, -1.f, 1.f);
+                    combTrailZ[j] = clamp((displayZ[0] + displayZ[1] + displayZ[2] + displayZ[3]) / 2.f, -1.f, 1.f);
                 }
             }
 
@@ -611,17 +614,18 @@ struct StrangeWeather : Module {
             }
 
             // Combined: use sum and rectified sum as x,y,z
+            // Scale by 4 instead of 12 for more dynamic range in display
             float normSum = (displayX[0] + displayY[0] + displayZ[0] +
                             displayX[1] + displayY[1] + displayZ[1] +
                             displayX[2] + displayY[2] + displayZ[2] +
-                            displayX[3] + displayY[3] + displayZ[3]) / 12.f;
+                            displayX[3] + displayY[3] + displayZ[3]) / 4.f;
             float normRect = (std::abs(displayX[0]) + std::abs(displayY[0]) + std::abs(displayZ[0]) +
                              std::abs(displayX[1]) + std::abs(displayY[1]) + std::abs(displayZ[1]) +
                              std::abs(displayX[2]) + std::abs(displayY[2]) + std::abs(displayZ[2]) +
-                             std::abs(displayX[3]) + std::abs(displayY[3]) + std::abs(displayZ[3])) / 12.f;
+                             std::abs(displayX[3]) + std::abs(displayY[3]) + std::abs(displayZ[3])) / 4.f;
             combTrailX[trailIndex] = clamp(normSum, -1.f, 1.f);
-            combTrailY[trailIndex] = clamp(normRect * 2.f - 1.f, -1.f, 1.f);
-            combTrailZ[trailIndex] = clamp((displayZ[0] + displayZ[1] + displayZ[2] + displayZ[3]) / 4.f, -1.f, 1.f);
+            combTrailY[trailIndex] = clamp(normRect - 1.f, -1.f, 1.f);
+            combTrailZ[trailIndex] = clamp((displayZ[0] + displayZ[1] + displayZ[2] + displayZ[3]) / 2.f, -1.f, 1.f);
         }
     }
 
@@ -1158,10 +1162,10 @@ struct PanelLabels : Widget {
         nvgTextAlign(args.vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
         nvgFillColor(args.vg, nvgRGB(0x55, 0x55, 0x55));
         float descX = mm2px(9.0);
-        nvgText(args.vg, descX, mm2px(90), "LORENZ: Smooth two-lobed butterfly", NULL);
+        nvgText(args.vg, descX, mm2px(90), "SPROTT B: Minimal equations, robust chaos", NULL);
         nvgText(args.vg, descX, mm2px(95), "ROSSLER: Asymmetric spiral, large excursions", NULL);
         nvgText(args.vg, descX, mm2px(100), "THOMAS: Cyclically symmetric, smooth rolling", NULL);
-        nvgText(args.vg, descX, mm2px(105), "HALVORSEN: Sculptural, sharp transitions", NULL);
+        nvgText(args.vg, descX, mm2px(105), "DADRAS: Multi-wing, complex dynamics", NULL);
 
         // Combined section - label under RATE column, inline with jacks
         nvgFontSize(args.vg, 10);

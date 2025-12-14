@@ -2,7 +2,7 @@
 
 A chaotic CV generator for VCV Rack 2 based on strange attractors.
 
-![strange weather 4](https://github.com/user-attachments/assets/d522df1a-22c2-4fc3-adb0-98394b366680)
+![Strange Weather 2.0](strange-weather-2.0.jpg)
 ## Overview
 
 Strange Weather generates continuously evolving control voltages using mathematical chaos. Four independent attractor banks produce deterministic but unpredictable modulation — not random, but impossible to predict.
@@ -10,7 +10,7 @@ Strange Weather generates continuously evolving control voltages using mathemati
 ## Features
 
 - **4 Independent Banks** — Each runs its own strange attractor
-- **4 Attractor Types** — Lorenz, Rossler, Thomas, Halvorsen
+- **4 Attractor Types** — Sprott B, Rossler, Thomas, Dadras
 - **20 CV Outputs** — 4 per bank + 4 combined
 - **Real-time Visualization** — Watch the attractors evolve
 - **3 Display Modes** — Trace (lines), Lissajous (phosphor dots), Scope (waveforms)
@@ -64,7 +64,7 @@ cp -r res ~/Library/Application\ Support/Rack2/plugins-mac-arm64/StrangeWeather/
 |---------|----------|
 | **RATE** | Attractor evolution speed within selected range |
 | **RNG** | Range selector: Low (5-20 min), Med (1s-2min), High (0.1-10s) |
-| **SHAPE** | Attractor type: Lorenz, Rossler, Thomas, Halvorsen |
+| **SHAPE** | Attractor type: Sprott B, Rossler, Thomas, Dadras |
 | **VOLT** | Output voltage: +/-5V, +/-10V, 0-5V, 0-10V |
 | **CHAOS** | Primary chaos parameter - affects attractor behavior |
 
@@ -88,10 +88,10 @@ cp -r res ~/Library/Application\ Support/Rack2/plugins-mac-arm64/StrangeWeather/
 
 | Type | Character |
 |------|-----------|
-| **Lorenz** | The classic butterfly. Smooth, two-lobed with fold-over behavior |
+| **Sprott B** | Minimal chaotic system with robust, reliable chaos |
 | **Rossler** | Asymmetric spiral with occasional large excursions |
 | **Thomas** | Cyclically symmetric, smooth rolling motion |
-| **Halvorsen** | Sculptural and aggressive with sharp transitions |
+| **Dadras** | Multi-wing attractor with complex dynamics |
 
 ## License
 
