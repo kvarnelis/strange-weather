@@ -532,7 +532,7 @@ struct AttractorDisplay : Widget {
         if (mode == 6) {
             // Load image if not loaded yet
             if (ajmanImage == -1) {
-                std::string path = asset::plugin(pluginInstance, "res/ajman.jpg");
+                std::string path = asset::plugin(pluginInstance, "res/hidden/ajman.jpg");
                 ajmanImage = nvgCreateImage(args.vg, path.c_str(), 0);
             }
             if (ajmanImage != -1) {

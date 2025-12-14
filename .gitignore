@@ -17,9 +17,6 @@ plugin.dll
 # macOS
 .DS_Store
 
-# Easter egg
-ajman.jpg
-res/ajman.jpg
 
 # Rack SDK (if local)
 Rack-SDK/
