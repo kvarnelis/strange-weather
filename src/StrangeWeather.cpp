@@ -576,23 +576,14 @@ struct StrangeWeather : Module {
         outputs[COMB_DIST_OUTPUT].setVoltage(combDist);
 
         // Update trail history (downsample for display)
-        // Scale by slowest range: High=60fps, Med=20fps, Low=5fps
-        int minRange = 2;
-        for (int i = 0; i < 4; i++) {
-            int r = (int)params[rangeParams[i]].getValue();
-            if (r < minRange) minRange = r;
-        }
-        float trailFps = (minRange == 0) ? 10.f : (minRange == 1) ? 20.f : 60.f;
-
+        // Use fixed 30fps - good balance for all ranges
         trailCounter++;
-        if (trailCounter >= (int)(args.sampleRate / trailFps)) {
+        if (trailCounter >= (int)(args.sampleRate / 30.f)) {
             trailCounter = 0;
 
             // Wait for smoothing to settle, then fill trail with current position (clear screen)
-            // Scale delay to ~0.5s regardless of fps
             initDelay++;
-            int initFrames = std::max(5, (int)(trailFps * 0.5f));
-            if (initDelay == initFrames) {
+            if (initDelay == 15) {  // 0.5s at 30fps
                 for (int j = 0; j < MAX_TRAIL_LENGTH; j++) {
                     for (int i = 0; i < 4; i++) {
                         trailX[i][j] = displayX[i];
