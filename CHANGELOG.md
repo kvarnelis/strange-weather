@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.0.3] - 2024-12-18
+
+### Fixed
+- **Fixed Windows crash** — Added M_PI definition for Windows MSVC compatibility
+
 ## [2.0.2] - 2024-12-15
 
 ### Fixed
